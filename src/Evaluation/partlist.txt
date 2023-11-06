@@ -1,0 +1,4 @@
+butterfly.stl
+12_merged_9_Butt.stl
+12_op_9_Butt.stl
+12_sperate_9_Butt.stl

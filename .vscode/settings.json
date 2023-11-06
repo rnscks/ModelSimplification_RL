@@ -1,0 +1,15 @@
+{
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.autopep8"
+  },
+  "python.formatting.provider": "none",
+  "python.analysis.extraPaths": ["./src/PlotDarw"],
+  "terminal.integrated.profiles.windows": {
+    "GitBash": {
+      "source": "Git Bash",
+      "path": ["C:\\Program Files\\Git\\bin\\bash.exe"]
+    }
+  },
+
+  "terminal.integrated.defaultProfile.windows": "Git Bash"
+}
