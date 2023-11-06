@@ -103,7 +103,7 @@ class RGEx:
         self.DataSet['Model Name'].append(self.ModelName)
         self.DataSet['Algorithm'].append(id)
         self.DataSet['K'].append(str(len(meshList)))
-        self.DataSet['CD'].append(cfd.VRun())
+        self.DataSet['CD'].append(cfd.TriRun())
 
     def Done(self):
         df = pd.DataFrame(self.DataSet)
@@ -133,7 +133,7 @@ if (__name__ == "__main__"):
     idNumbering = 0
 
     while (True):
-        rgex = RGEx(fileName, idNumbering, 1, modelName, True, True, 1, 1)
+        rgex = RGEx(fileName, idNumbering, 100, modelName, True, True, 10, 1)
         for i in range(1, partNumber + 1):
             rgex.SetK(i)
             resultDataFrame: pd.DataFrame = rgex.Run()

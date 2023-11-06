@@ -44,7 +44,7 @@ class ACOR:
                 deci += mesh.decimate(percents[i])
         chd = ChamferDistance(deci, self.RefModel)
 
-        bi = chd.VRun()
+        bi = chd.TriRun()
         ci = deci.n_faces / self.RefModel.n_faces
 
         return bi * ci
