@@ -11,10 +11,11 @@ import numpy as np
 import time
 from Evaluation.ChamferDistance import ChamferDistance
 from MakeDir import MakeDir
+from ModelUtil.ModelFileList import FileNameList
 
 
 class RGEx:
-    def __init__(self, fileName, numbering, iteration, modelName, isModelStore, isPlotStore, exSetNumber) -> None:
+    def __init__(self, fileName, numbering, iteration, modelName, isModelStore, isPlotStore, exSetNumber, k) -> None:
         self.ExSetNumber = exSetNumber
         self.IsPlotStore = isPlotStore
         self.IsModelStore = isModelStore
@@ -23,23 +24,18 @@ class RGEx:
         self.DataSet = {'Model Name': [],
                         'Algorithm': [],
                         'K': [],
-                        'mesh': [],
-                        'CD': [],
-                        'Vertex CD': [],
-                        'Triangle CD': [],
-                        'Volume': [],
-                        'Decimate Percent': [],
-                        'time': []}
+                        'CD': []}
         self.Numbering = numbering
         self.Iteration = iteration
-        self.RootMkd = MakeDir(self.FileName[:4] + str(self.Numbering))
-        self.MkdID = 0
+        self.RootMkd = MakeDir(self.ModelName + str(self.Numbering))
+        self.K = k
+        self.MkdID = 1
         pass
 
     def SetK(self, k):
         self.K = k
         self.Mkd = MakeDir(
-            self.FileName[:4] + str(self.Numbering) + str(self.MkdID))
+            self.ModelName + str(self.Numbering) + str(self.MkdID))
         self.Mkd.IntoDir(self.RootMkd.DirName)
         self.MkdID += 1
 
@@ -83,18 +79,19 @@ class RGEx:
             speratedQemEndTime = time.time() - speratedQemStartTime
 
             if (self.IsModelStore is True):
-                self.__WriteSTLModel('Optimization', resultModel, len(meshList), j)
                 self.__WriteSTLModel(
-                    'Merged QEM', mergedDecimatedModel, len(meshList), j)
+                    'QEM(Optimized)', resultModel, len(meshList), j)
                 self.__WriteSTLModel(
-                    'Separate QEM', speratedDecimatedModel, len(meshList), j)
-                
+                    'QEM(Merged)', mergedDecimatedModel, len(meshList), j)
+                self.__WriteSTLModel(
+                    'QEM(Separated)', speratedDecimatedModel, len(meshList), j)
+
             self.__WriteDataSet(resultModel, refModel,
-                                meshList, acorEndTime, 'Optimization')
+                                meshList, acorEndTime, 'QEM(Optimized)')
             self.__WriteDataSet(mergedDecimatedModel,
-                                refModel, meshList, mergedQemEndTime, 'Merged QEM')
+                                refModel, meshList, mergedQemEndTime, 'QEM(Merged)')
             self.__WriteDataSet(speratedDecimatedModel,
-                                refModel, meshList, speratedQemEndTime, 'Separate QEM')
+                                refModel, meshList, speratedQemEndTime, 'QEM(Separated)')
 
     def __WriteSTLModel(self, id: str, model: pv.PolyData, k: int, index: int):
         model.save(os.path.join(self.Mkd.FolderPath, str(k) + '_' +
@@ -106,21 +103,15 @@ class RGEx:
         self.DataSet['Model Name'].append(self.ModelName)
         self.DataSet['Algorithm'].append(id)
         self.DataSet['K'].append(str(len(meshList)))
-        self.DataSet['mesh'].append(model.n_faces)
-        self.DataSet['Vertex CD'].append(cfd.VRun())
-        self.DataSet['Triangle CD'].append(cfd.TriRun())
-        self.DataSet['CD'].append(cfd.Run())
-        self.DataSet['time'].append(time)
-        self.DataSet['Decimate Percent'].append(
-            model.n_faces / refmodel.n_faces)
-        self.DataSet['Volume'].append(
-            np.abs(model.volume - refmodel.volume))
+        self.DataSet['CD'].append(cfd.VRun())
 
-    def Done(self):  
+    def Done(self):
         df = pd.DataFrame(self.DataSet)
         if (self.IsPlotStore is True):
-            mpld = MeanLinePlotDrawer(exprimentDataSet = df, modelName=self.ModelName)
-            pld = BoxPlotDrawer(exprimentDataSet = df, modelName=self.ModelName)
+            mpld = MeanLinePlotDrawer(
+                exprimentDataSet=df, modelName=self.ModelName, numbering=self.Numbering)
+            pld = BoxPlotDrawer(
+                exprimentDataSet=df, modelName=self.ModelName, numbering=self.Numbering)
             mpld.Run()
             pld.Run()
 
@@ -135,20 +126,17 @@ class RGEx:
 
 
 if (__name__ == "__main__"):
-    fileName = input()
-    ex = RGEx(fileName, 0, 1)
-    w = []
-    k = []
-    n = 14
+    fnl = FileNameList()
+    modelName = fnl.CurrentModelName()
+    fileName = fnl.CurrentModleFileName()
+    partNumber = fnl.HashFileNameToPartNumber[fileName]
+    idNumbering = 0
 
-    for i in range(n):
-        w.append(float(input()))
+    while (True):
+        rgex = RGEx(fileName, idNumbering, 1, modelName, True, True, 1, 1)
+        for i in range(1, partNumber + 1):
+            rgex.SetK(i)
+            resultDataFrame: pd.DataFrame = rgex.Run()
 
-    for i in range(n):
-        k.append(int(input()))
-
-    for i in range(n):
-        ex.SetK(k[i])
-        ex.Run()
-
-    ex.Done()
+        rgex.Done()
+        idNumbering += 1

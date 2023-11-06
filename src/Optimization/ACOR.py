@@ -2,9 +2,6 @@ import util
 from Evaluation.ChamferDistance import ChamferDistance
 
 import numpy as np
-import open3d as o3d
-
-from scipy.spatial.distance import cdist
 import pyvista as pv
 
 
@@ -54,14 +51,6 @@ class ACOR:
 
     def __CalOmega(self, index):
         return ((self.q * self.K * np.sqrt(2 * np.pi)) ** -1) * np.exp(-(np.square(index - 1)/(2 * np.square(self.q) * np.square(self.K))))
-
-    def __InitializeInitialCD(self) -> None:
-        decimatedModel = pv.PolyData()
-        decimatedModel.deep_copy(self.RefModel)
-        decimatedModel.decimate(90)
-        cfd = ChamferDistance(decimatedModel, self.RefMode)
-        self.InitialCD = cfd.TriRun()
-        return
 
     def __InitializeSolutionArchive(self) -> None:
         DEVIATION = 1
