@@ -23,7 +23,7 @@ class ACOR:
         self.RefModel.deep_copy(refModel)
         self.ObjectFace = objectiveFace
         self.InitialCD = 0
-        #self.__InitializeInitialCD()
+        # self.__InitializeInitialCD()
         self.__InitializeSolutionArchive()
 
         return
@@ -45,16 +45,16 @@ class ACOR:
                 deci = mesh.decimate(percents[i])
             else:
                 deci += mesh.decimate(percents[i])
-        #chd = ChamferDistance(deci, self.RefModel)
+        chd = ChamferDistance(deci, self.RefModel)
 
-        bi = np.abs(deci.volume - self.RefModel.volume)
+        bi = chd.VRun()
         ci = deci.n_faces / self.RefModel.n_faces
 
-        return  bi * ci
+        return bi * ci
 
     def __CalOmega(self, index):
         return ((self.q * self.K * np.sqrt(2 * np.pi)) ** -1) * np.exp(-(np.square(index - 1)/(2 * np.square(self.q) * np.square(self.K))))
-    
+
     def __InitializeInitialCD(self) -> None:
         decimatedModel = pv.PolyData()
         decimatedModel.deep_copy(self.RefModel)
@@ -112,10 +112,11 @@ class ACOR:
         return
 
     def __AppendSolution(self, solution):
-        currentObjectiveValue = self.__DecimateByMatrix(solution, self.MeshList)
+        currentObjectiveValue = self.__DecimateByMatrix(
+            solution, self.MeshList)
         if (currentObjectiveValue > self.SolutionArchive[self.K - 1,
-                             self.N]):
-            return 
+                                                         self.N]):
+            return
 
         for i in range(self.N):
             self.SolutionArchive[self.K - 1, i] = solution[i]
