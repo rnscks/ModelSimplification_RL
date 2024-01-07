@@ -11,6 +11,5 @@
     }
   },
 
-  "terminal.integrated.defaultProfile.windows": "Git Bash",
-  "cmake.configureOnOpen": false
+  "terminal.integrated.defaultProfile.windows": "Git Bash"
 }
