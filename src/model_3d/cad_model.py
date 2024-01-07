@@ -1,25 +1,28 @@
 import os
+
 from abc import ABC, abstractmethod
 from typing import Optional 
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Compound, TopoDS_Iterator
 from OCC.Core.Bnd import Bnd_Box    
+from OCC.Core.BRepAlgoAPI import BRepAlgoAPI_Fuse   
 from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.TopAbs import TopAbs_OUT
 import pyvista as pv
+import torch
+from pytorch3d import loss
+from pytorch3d.structures import Pointclouds, Meshes
 
-from file_system import FileReader    
-from tessellator.brep_convertor import ShapeToMeshConvertor
+from model_3d.file_system import FileReader    
+from model_3d.tessellator.brep_convertor import ShapeToMeshConvertor
 
 
 class MetaModel(ABC):
     def __init__(self, part_name: Optional[str] = None):        
         self.part_name = part_name
-        self.brep_shape: Optional[TopoDS_Shape] = None  
-        self.mesh: Optional[pv.PolyData] = None 
+        self.vista_mesh: Optional[pv.PolyData] = None   
         self.color: str = "red"
-        self.tranparency: float = 0.0
+        self.tranparency: float = 1.0
         self.is_visible: bool = True    
-
 
     @abstractmethod
     def get_volume(self) -> float:
@@ -40,18 +43,43 @@ class ViewDocument:
     def display(self) -> None:
         plotter = pv.Plotter()
         for model in self.model_list:
-            plotter.add_mesh(model.mesh)    
+            if model.vista_mesh is None or model.is_visible is False:
+                continue
+            plotter.add_mesh(model.vista_mesh, color=model.color, opacity=model.tranparency)    
             
         plotter.show()
         return  
 
 class PartModel(MetaModel):
-    def __init__(self, part_name: str = "part model", brep_shape: Optional[TopoDS_Shape] = None, mesh: Optional[pv.PolyData] = None, bnd_box: Optional[Bnd_Box] = None) -> None:   
-        super().__init__(part_name)
-        self.brep_shape = brep_shape
-        self.mesh = mesh
-        self.bnd_box: Optional[Bnd_Box] = bnd_box
+    def __init__(self, 
+                 part_name: str = "part model", 
+                 brep_shape: Optional[TopoDS_Shape] = None, 
+                 vista_mesh: Optional[pv.PolyData] = None, 
+                 bnd_box: Optional[Bnd_Box] = None, 
+                 part_index: Optional[int] = None) -> None:   
         
+        super().__init__(part_name)
+        self.brep_shape: Optional[TopoDS_Shape] = brep_shape
+        self.bnd_box: Optional[Bnd_Box] = bnd_box
+        self.part_index: Optional[int] = part_index
+        self.torch_mesh: Optional[Meshes] = None 
+        self.torch_point_cloud: Optional[Pointclouds] = None    
+        self.vista_mesh = vista_mesh
+        
+    def init_torch_property(self) -> None:
+        points = self.vista_mesh.points
+        faces = self.vista_mesh.faces  
+        
+        torch_points = torch.tensor(points, dtype=torch.float32)
+        torch_faces = torch.tensor(faces, dtype=torch.int64)    
+        torch_faces = torch_faces.reshape(-1, 4)[:, 1:4]
+        torch_points = torch_points.view(1, -1, 3)
+        torch_faces = torch_faces.view(1, -1, 3)
+        
+        self.torch_mesh = Meshes(torch_points, torch_faces)  
+        self.torch_point_cloud = Pointclouds(torch_points)
+        return
+
         
     def add_to_view_document(self, view_document: ViewDocument) -> None:   
         view_document.add_model(self)
@@ -59,11 +87,16 @@ class PartModel(MetaModel):
         
     def copy_from(self, other: 'PartModel') -> None:    
         self.brep_shape = other.brep_shape
-        self.mesh = other.mesh
+        self.vista_mesh = other.vista_mesh
+        self.bnd_box = other.bnd_box    
+        self.torch_mesh = other.torch_mesh
+        self.torch_point_cloud = other.torch_point_cloud    
+        self.part_index = other.part_index  
+        self.color = other.color
         return
     
     def get_volume(self) -> float:
-        return self.mesh.volume
+        return self.vista_mesh.volume
     
     def is_neighbor(self, other: 'PartModel') -> bool:  
         if self.bnd_box is None or other.bnd_box is None:
@@ -77,8 +110,10 @@ class PartModel(MetaModel):
 class Assembly(MetaModel):
     def __init__(self, assemply_name: Optional[str] = None) -> None:
         super().__init__(assemply_name)
+        self.is_visible = False 
+
         self.part_model_list: Optional[list[PartModel]] = None
-        self.conectivity_dict: Optional[dict[int, int]] = None 
+        self.conectivity_dict: Optional[dict[int, list[int]]] = None 
         return
     
     def get_volume(self) -> float:  
@@ -110,43 +145,110 @@ class AssemblyFactory:
         
         brep_compound: TopoDS_Compound = FileReader.read_stp_file(stp_file_path)
         shape_iter: TopoDS_Iterator = TopoDS_Iterator(brep_compound)
-    
+        
+        part_index: int = 0
         while (shape_iter.More()):
             brep_shape: TopoDS_Shape = shape_iter.Value()
             if brep_shape.IsNull():
                 continue
 
-            mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
-            part_model_list.append(cls.create_part_model(mesh, brep_shape))
+            part_model_list.append(cls.create_part_model(brep_shape = brep_shape, 
+                                                         part_index = part_index))
             shape_iter.Next()
+            part_index += 1
             
         assembly.part_model_list = part_model_list
         
-        connectivity_dict: dict[int, int] = cls.create_part_connectivity_dict(part_model_list)
+        connectivity_dict: dict[int, list[int]] = \
+            cls.create_part_connectivity_dict(part_model_list)
         assembly.conectivity_dict = connectivity_dict   
         
         return assembly
     
     @classmethod
-    def create_part_model(cls, mesh: pv.PolyData, brep_shape: TopoDS_Shape, part_name: str = "part") -> PartModel: 
+    def create_merged_assembly(cls, assembly: Assembly, cluster_list: list[list[int]], assembly_name: str) -> Assembly:
+        if cluster_list is None:   
+            raise ValueError("cluster_list is None")    
+        if cluster_list == [] or cluster_list == [[]]:
+            raise ValueError("cluster_list is empty")   
+        if assembly.part_model_list is None:    
+            raise ValueError("assembly.part_model_list is None")    
+        
+        merged_assembly = Assembly()   
+        merged_assembly.part_name = assembly_name
+                
+        part_model_list: list[PartModel] = []
+        for cluster_index, cluster in enumerate(cluster_list):
+            if len(cluster) == 1:
+                part_model: PartModel = assembly.part_model_list[cluster[0]]
+                part_model.part_index = cluster_index
+                part_model_list.append(part_model)
+                continue
+            
+            merged_part_model = cls.merge_part_model(assembly, cluster, cluster_index)
+            part_model_list.append(merged_part_model)  
+            
+        merged_assembly.part_model_list = part_model_list 
+        
+        connectivity_dict: dict[int, list[int]] = \
+            cls.create_part_connectivity_dict(part_model_list)
+        merged_assembly.conectivity_dict = connectivity_dict   
+
+        return merged_assembly
+
+    @classmethod
+    def merge_part_model(cls, assembly: Assembly, cluster: list[int], cluster_index: int) -> PartModel:        
+        merged_part_model = PartModel()
+        merged_part_model.part_name = "merged_part"
+        color: str = assembly.part_model_list[cluster[0]].color
+        fused_brep_shape: TopoDS_Shape = TopoDS_Shape() 
+         
+        for part_index in cluster:
+            part_model: PartModel = assembly.part_model_list[part_index]
+            
+            if fused_brep_shape.IsNull():
+                fused_brep_shape = part_model.brep_shape
+            else:
+                fused_brep_shape = BRepAlgoAPI_Fuse(fused_brep_shape, part_model.brep_shape).Shape()
+
+        return cls.create_part_model(fused_brep_shape, 
+                                     part_name = "merged_part", 
+                                     part_index = cluster_index,
+                                     color = color)
+    
+    @classmethod
+    def create_part_model(cls, brep_shape: TopoDS_Shape, part_name: str = "part", part_index: Optional[int] = None, color: str = "red") -> PartModel: 
         bnd_box = Bnd_Box()
         brepbndlib.Add(brep_shape, bnd_box) 
-        
-        return PartModel(part_name= part_name,
-                        mesh = mesh, 
+        mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
+
+        part_model = PartModel(part_name = part_name,
+                        vista_mesh = mesh, 
                         brep_shape = brep_shape,
-                        bnd_box = bnd_box)
+                        bnd_box = bnd_box,
+                        part_index = part_index)
+        part_model.color = color
+        part_model.init_torch_property()
+        return part_model
         
     @classmethod
     def create_part_connectivity_dict(cls, part_model_list: list[PartModel]) -> dict[int, int]:
-        conectivity_dict: dict[int, int] = {}
-        for part_index, part_model in enumerate(part_model_list):   
-            for neighbor_index, part_model_neighbor in enumerate(part_model_list):
+        conectivity_dict: dict[int, list[int]] = {}
+        
+        for part_model in part_model_list:   
+            for part_model_neighbor in part_model_list:
                 if part_model == part_model_neighbor:
                     continue
                 
                 if part_model.is_neighbor(part_model_neighbor):
-                    conectivity_dict[part_index] = neighbor_index
+                    part_index = part_model.part_index
+                    neighbor_index = part_model_neighbor.part_index
+                    
+                    if part_index not in conectivity_dict:
+                        conectivity_dict[part_index] = []
+
+                    conectivity_dict[part_index].append(neighbor_index)
+                    
         return conectivity_dict
 
 
@@ -155,4 +257,5 @@ if __name__ == "__main__":
     view_document = ViewDocument()
     
     assembly.add_to_view_document(view_document)
+    print(assembly.conectivity_dict)
     view_document.display()
