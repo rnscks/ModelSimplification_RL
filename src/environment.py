@@ -16,7 +16,7 @@ class CircularQueueMeshSimplificationEnv(gym.Env):
                 growing_ratio: float = 0.5) -> None:
         super(CircularQueueMeshSimplificationEnv, self).__init__()
         self.action_space = gym.spaces.Box(low=0.0, high=0.9, shape=(1,), dtype=float)
-        self.observation_space = gym.spaces.Box(low=0.1, high=0.9, shape=(2,), dtype=float)
+        self.observation_space = gym.spaces.Box(low=0.1, high=0.9, shape=(10,), dtype=float)
         
         self.stp_file_path: str = stp_file_path  
         self.growing_ratio: float = growing_ratio   
@@ -31,8 +31,6 @@ class CircularQueueMeshSimplificationEnv(gym.Env):
 
     def step(self, action: float) -> Tuple[object, float, bool, dict]:
         self.agent.action(action[0])
-        print(f"action: {action[0]}")
-        print(f"face: {self.agent.simplified_assembly.get_face_number()}")
         
         self.current_action = action[0]
         observation: np.ndarry = self.agent.get_observation(self.current_action)
@@ -44,7 +42,6 @@ class CircularQueueMeshSimplificationEnv(gym.Env):
 
         reward: float = 0.0    
         reward += self.agent.get_reward(terminated)   
-        print(f"reward: {reward}")
         
         return observation, reward, terminated, False, {} 
     
@@ -81,7 +78,7 @@ class IndexingMeshSimplificationEnv(gym.Env):
                 growing_ratio: float = 0.5) -> None:
         super(CircularQueueMeshSimplificationEnv, self).__init__()
         self.action_space = gym.spaces.Box(low=0.0, high=0.9, shape=(1,), dtype=float)
-        self.observation_space = gym.spaces.Box(low=0.1, high=0.9, shape=(2,), dtype=float)
+        self.observation_space = gym.spaces.Box(low=0.1, high=0.9, shape=(10,), dtype=float)
         self.stp_file_path: str = stp_file_path  
         self.growing_ratio: float = growing_ratio   
         original_assembly: Assembly = AssemblyFactory.create_assembly(self.stp_file_path)  
@@ -152,6 +149,6 @@ if __name__ == "__main__":
         model.learn(total_timesteps=100000, tb_log_name="first_run")  
         model.save("ppo_model_simplification2")
         return
-
+    circular_queue_mesh_simplification_env_example()
     # 관찰:  파트 수, 현재 파트 인덱스
     # 행동: 파트 수, 단순화 비율
