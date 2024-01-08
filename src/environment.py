@@ -5,15 +5,16 @@ from typing import Optional, Tuple
 
 from model_3d.cad_model import AssemblyFactory, ViewDocument, Assembly, PartModel
 from model_3d.model_util import ChamferDistance, PointToMeshDistance, RegionGrowing, ChamferDistanceAssembly
-from agent import SimplificationAgent  
+from agent import CircularQueueSimplificationAgent  
 from torch.utils.tensorboard import SummaryWriter
 
-class MeshSimplificationEnv(gym.Env):
+
+class CircularQueueMeshSimplificationEnv(gym.Env):
     metadata = {"render_modes": [None]}
     def __init__(self, 
                 stp_file_path: str = "ButterflyValve.stp", 
                 growing_ratio: float = 0.5) -> None:
-        super(MeshSimplificationEnv, self).__init__()
+        super(CircularQueueMeshSimplificationEnv, self).__init__()
         self.action_space = gym.spaces.Box(low=0.0, high=0.9, shape=(1,), dtype=float)
         self.observation_space = gym.spaces.Box(low=0.1, high=0.9, shape=(2,), dtype=float)
         
@@ -23,24 +24,28 @@ class MeshSimplificationEnv(gym.Env):
         original_assembly: Assembly = AssemblyFactory.create_assembly(self.stp_file_path)  
         self.merged_assembly: Optional[Assembly] = self.get_merged_assembly(original_assembly)
         self.simplyfied_assembly: Optional[Assembly] = Assembly().copy_from_assembly(self.merged_assembly)   
-        self.agent = SimplificationAgent(original_assembly = original_assembly, 
+        self.agent = CircularQueueSimplificationAgent(original_assembly = original_assembly, 
                                         simplified_assembly = self.simplyfied_assembly)    
+        self.current_action: float = 0.0
 
 
     def step(self, action: float) -> Tuple[object, float, bool, dict]:
         self.agent.action(action[0])
         print(f"action: {action[0]}")
-        observation: np.ndarry = self.agent.get_observation()
-        reward: float = 0.0
-        terminated: bool = False
-        
         print(f"face: {self.agent.simplified_assembly.get_face_number()}")
-        reward += self.agent.get_reward()   
         
+        self.current_action = action[0]
+        observation: np.ndarry = self.agent.get_observation(self.current_action)
+        
+        
+        terminated: bool = False
         if self.agent.simplified_assembly.get_face_number() <= 700:
-            reward += self.agent.get_last_reward()    
             terminated = True
+
+        reward: float = 0.0    
+        reward += self.agent.get_reward(terminated)   
         print(f"reward: {reward}")
+        
         return observation, reward, terminated, False, {} 
     
     def reset(self, seed=None, options=None):
@@ -50,10 +55,72 @@ class MeshSimplificationEnv(gym.Env):
         simplified_assmebly = Assembly()
         simplified_assmebly.copy_from_assembly(self.merged_assembly)   
         self.simplyfied_assembly: Optional[Assembly] = simplified_assmebly
-        
-        self.agent = SimplificationAgent(original_assembly = self.merged_assembly, 
+        self.agent = CircularQueueSimplificationAgent(original_assembly = self.merged_assembly, 
                                         simplified_assembly = self.simplyfied_assembly)    
-        return self.agent.get_observation(), {}
+        return self.agent.get_observation(self.current_action), {}
+    
+    def render(self, mode: str = 'human') -> None:
+        raise NotImplementedError()
+    
+    def close(self) -> None:
+        raise NotImplementedError()
+    
+    def get_merged_assembly(self, original_assembly: Assembly) -> Assembly:
+        cluster_list = RegionGrowing(growing_ratio=self.growing_ratio).cluster(original_assembly)
+        merged_assembly = \
+            AssemblyFactory.create_merged_assembly(assembly = original_assembly, 
+                                                cluster_list = cluster_list, 
+                                                assembly_name = f"merged {original_assembly.part_name}")
+        return merged_assembly
+    
+    
+class IndexingMeshSimplificationEnv(gym.Env):
+    metadata = {"render_modes": [None]}
+    def __init__(self, 
+                stp_file_path: str = "ButterflyValve.stp", 
+                growing_ratio: float = 0.5) -> None:
+        super(CircularQueueMeshSimplificationEnv, self).__init__()
+        self.action_space = gym.spaces.Box(low=0.0, high=0.9, shape=(1,), dtype=float)
+        self.observation_space = gym.spaces.Box(low=0.1, high=0.9, shape=(2,), dtype=float)
+        self.stp_file_path: str = stp_file_path  
+        self.growing_ratio: float = growing_ratio   
+        original_assembly: Assembly = AssemblyFactory.create_assembly(self.stp_file_path)  
+        self.merged_assembly: Optional[Assembly] = self.get_merged_assembly(original_assembly)
+        self.simplyfied_assembly: Optional[Assembly] = Assembly().copy_from_assembly(self.merged_assembly)   
+        self.agent = CircularQueueSimplificationAgent(original_assembly = original_assembly, 
+                                        simplified_assembly = self.simplyfied_assembly)    
+        self.current_action: float = 0.0
+
+
+    def step(self, action: float) -> Tuple[object, float, bool, dict]:
+        self.agent.action(action[0])
+        print(f"action: {action[0]}")
+        print(f"face: {self.agent.simplified_assembly.get_face_number()}")
+        
+        self.current_action = action[0]
+        observation: np.ndarry = self.agent.get_observation(self.current_action)
+        
+        
+        terminated: bool = False
+        if self.agent.simplified_assembly.get_face_number() <= 700:
+            terminated = True
+
+        reward: float = 0.0    
+        reward += self.agent.get_reward(terminated)   
+        print(f"reward: {reward}")
+        
+        return observation, reward, terminated, False, {} 
+    
+    def reset(self, seed=None, options=None):
+        original_assembly: Assembly = AssemblyFactory.create_assembly(self.stp_file_path)  
+        self.merged_assembly: Optional[Assembly] = self.get_merged_assembly(original_assembly)
+        
+        simplified_assmebly = Assembly()
+        simplified_assmebly.copy_from_assembly(self.merged_assembly)   
+        self.simplyfied_assembly: Optional[Assembly] = simplified_assmebly
+        self.agent = CircularQueueSimplificationAgent(original_assembly = self.merged_assembly, 
+                                        simplified_assembly = self.simplyfied_assembly)    
+        return self.agent.get_observation(self.current_action), {}
     
     def render(self, mode: str = 'human') -> None:
         raise NotImplementedError()
@@ -78,10 +145,13 @@ if __name__ == "__main__":
         merged_air_compressor.add_to_view_document(view_document)
         view_document.display() 
         return
-    
-    env = MeshSimplificationEnv()
-    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_model_simplification_tensorboard/")    
-    model.learn(total_timesteps=100000, tb_log_name="first_run")  
-    model.save("ppo_model_simplification2")
+
+    def circular_queue_mesh_simplification_env_example():
+        env = CircularQueueMeshSimplificationEnv()
+        model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_model_simplification_tensorboard/")    
+        model.learn(total_timesteps=100000, tb_log_name="first_run")  
+        model.save("ppo_model_simplification2")
+        return
+
     # 관찰:  파트 수, 현재 파트 인덱스
     # 행동: 파트 수, 단순화 비율
