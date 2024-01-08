@@ -71,10 +71,12 @@ class PartModel(MetaModel):
             return
         if self.vista_mesh.n_faces_strict == 0:
             return
+        before_faces = self.vista_mesh.n_faces_strict
         self.vista_mesh = self.vista_mesh.triangulate()
         self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
+        after_faces = self.vista_mesh.n_faces_strict
         self.init_torch_property()  
-        return
+        return before_faces - after_faces
         
     def init_torch_property(self) -> None:
         points = self.vista_mesh.points
@@ -198,8 +200,8 @@ class AssemblyFactory:
     
     @classmethod
     def create_merged_assembly(cls, assembly: Assembly, 
-                               cluster_list: List[List[int]], 
-                               assembly_name: str) -> Assembly:
+                                cluster_list: List[List[int]], 
+                                assembly_name: str) -> Assembly:
         if cluster_list is None:   
             raise ValueError("cluster_list is None")    
         if cluster_list == [] or cluster_list == [[]]:
@@ -213,8 +215,8 @@ class AssemblyFactory:
         part_model_list: list[PartModel] = []
         for cluster_index, cluster in enumerate(cluster_list):
             if len(cluster) == 1:
-                part_model: PartModel = assembly.part_model_list[cluster[0]]
-                part_model.part_index = cluster_index
+                part_model: PartModel = PartModel()
+                part_model.copy_from(assembly.part_model_list[cluster[0]])  
                 part_model_list.append(part_model)
                 continue
             
@@ -237,28 +239,37 @@ class AssemblyFactory:
         merged_part_model.part_name = "merged_part"
         color: str = assembly.part_model_list[cluster[0]].color
         fused_brep_shape: TopoDS_Shape = TopoDS_Shape() 
-         
+        fused_vista_mesh: pv.PolyData = pv.PolyData()
+        
         for part_index in cluster:
             part_model: PartModel = assembly.part_model_list[part_index]
             
             if fused_brep_shape.IsNull():
                 fused_brep_shape = part_model.brep_shape
+                fused_vista_mesh = part_model.vista_mesh
             else:
                 fused_brep_shape = BRepAlgoAPI_Fuse(fused_brep_shape, part_model.brep_shape).Shape()
+                fused_vista_mesh += part_model.vista_mesh   
 
-        return cls.create_part_model(brep_shape = fused_brep_shape, 
+        return cls.create_part_model(brep_shape = fused_brep_shape,
+                                     fused_vista_mesh = fused_vista_mesh, 
                                      part_name = "merged_part", 
                                      part_index = cluster_index,
                                      color = color)
     
     @classmethod
     def create_part_model(cls, brep_shape: TopoDS_Shape, 
+                          vista_mesh: Optional[pv.PolyData] = None, 
                           part_name: str = "part", 
                           part_index: Optional[int] = None, 
                           color: str = "red") -> PartModel: 
         bnd_box = Bnd_Box()
         brepbndlib.Add(brep_shape, bnd_box) 
-        mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
+        
+        if vista_mesh is None:
+            mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
+        else:
+            mesh: pv.PolyData = pv.PolyData(vista_mesh.points, vista_mesh.faces)
 
         part_model = PartModel(part_name = part_name,
                         vista_mesh = mesh, 
