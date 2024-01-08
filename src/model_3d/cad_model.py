@@ -66,11 +66,11 @@ class PartModel(MetaModel):
         self.torch_point_cloud: Optional[Pointclouds] = None    
         self.vista_mesh = vista_mesh
         
-    def simplify(self, simplified_ratio: float) -> None: 
+    def simplify(self, simplified_ratio: float) -> int: 
         if self.vista_mesh is None:
-            return
+            return 0
         if self.vista_mesh.n_faces_strict == 0:
-            return
+            return 0
         before_faces = self.vista_mesh.n_faces_strict
         self.vista_mesh = self.vista_mesh.triangulate()
         self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
@@ -252,7 +252,7 @@ class AssemblyFactory:
                 fused_vista_mesh += part_model.vista_mesh   
 
         return cls.create_part_model(brep_shape = fused_brep_shape,
-                                     fused_vista_mesh = fused_vista_mesh, 
+                                     vista_mesh = fused_vista_mesh, 
                                      part_name = "merged_part", 
                                      part_index = cluster_index,
                                      color = color)

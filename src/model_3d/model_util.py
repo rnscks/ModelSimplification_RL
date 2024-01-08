@@ -87,7 +87,14 @@ class RegionGrowing(Cluster):
         
     def cluster(self, assembly: Assembly) -> List[List[int]]:
         cluster: List[int] = []
-        
+        if assembly.part_model_list is None:    
+            raise ValueError("assembly.part_model_list must not be None")   
+        if len(assembly.part_model_list) == 1 or len(assembly.part_model_list) == 0 or len(assembly.conectivity_dict) == 0:
+            cluster.append(0)
+            self.cluster_list.append(cluster)
+            return self.cluster_list    
+            
+
         for part_model in assembly.part_model_list:
             part_index: int = part_model.part_index    
             seed_volume: float = assembly.part_model_list[part_index].get_volume()
@@ -100,6 +107,7 @@ class RegionGrowing(Cluster):
             input_list.extend(cluster)
             self.cluster_list.append(input_list)
             cluster.clear() 
+            
         self.set_part_model_color(assembly)
         return self.cluster_list
     
@@ -110,10 +118,9 @@ class RegionGrowing(Cluster):
                 seed_number: float) -> None:
         if part_index in self.closed_list:  
             return None 
-
+        
         cluster.append(part_index)
         self.closed_list.append(part_index)
-
         neighbor_index_list: list[int] = assembly.conectivity_dict[part_index]
 
         for neighbor_index in neighbor_index_list:
