@@ -141,7 +141,7 @@ if __name__ == "__main__":
         view_document.display() 
         return
 
-    def circular_queue_mesh_simplification_env_example():
+    def list_method_mesh_simplification_env_example():
         env = ListMethodSimplificationEnv()
         model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_model_simplification_tensorboard/")    
         model.learn(total_timesteps=100000, tb_log_name="first_run")  
