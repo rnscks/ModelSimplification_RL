@@ -1,7 +1,7 @@
 import os
 
 from abc import ABC, abstractmethod
-from typing import Optional 
+from typing import Optional, List, Dict
 from OCC.Core.TopoDS import TopoDS_Shape, TopoDS_Compound, TopoDS_Iterator
 from OCC.Core.Bnd import Bnd_Box    
 from OCC.Core.BRepAlgoAPI import BRepAlgoAPI_Fuse   
@@ -66,6 +66,16 @@ class PartModel(MetaModel):
         self.torch_point_cloud: Optional[Pointclouds] = None    
         self.vista_mesh = vista_mesh
         
+    def simplify(self, simplified_ratio: float) -> None: 
+        if self.vista_mesh is None:
+            return
+        if self.vista_mesh.n_faces_strict == 0:
+            return
+        self.vista_mesh = self.vista_mesh.triangulate()
+        self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
+        self.init_torch_property()  
+        return
+        
     def init_torch_property(self) -> None:
         points = self.vista_mesh.points
         faces = self.vista_mesh.faces  
@@ -79,18 +89,18 @@ class PartModel(MetaModel):
         self.torch_mesh = Meshes(torch_points, torch_faces)  
         self.torch_point_cloud = Pointclouds(torch_points)
         return
-
         
     def add_to_view_document(self, view_document: ViewDocument) -> None:   
         view_document.add_model(self)
         return
         
-    def copy_from(self, other: 'PartModel') -> None:    
+    def copy_from(self, other: 'PartModel') -> None: 
         self.brep_shape = other.brep_shape
-        self.vista_mesh = other.vista_mesh
+        self.vista_mesh = pv.PolyData(other.vista_mesh.points, other.vista_mesh.faces)
+        self.vista_mesh = self.vista_mesh.triangulate()
+        
         self.bnd_box = other.bnd_box    
-        self.torch_mesh = other.torch_mesh
-        self.torch_point_cloud = other.torch_point_cloud    
+        self.init_torch_property()
         self.part_index = other.part_index  
         self.color = other.color
         return
@@ -112,9 +122,19 @@ class Assembly(MetaModel):
         super().__init__(assemply_name)
         self.is_visible = False 
 
-        self.part_model_list: Optional[list[PartModel]] = None
-        self.conectivity_dict: Optional[dict[int, list[int]]] = None 
+        self.part_model_list: Optional[List[PartModel]] = None
+        self.conectivity_dict: Optional[Dict[int, List[int]]] = None 
         return
+    
+    def get_face_number(self) -> int:   
+        if self.part_model_list is None:
+            return 0
+        
+        sum_of_face_number: int = 0
+        for part in self.part_model_list:
+            sum_of_face_number += part.vista_mesh.n_faces_strict
+
+        return sum_of_face_number   
     
     def get_volume(self) -> float:  
         if self.part_model_list is None:
@@ -131,6 +151,17 @@ class Assembly(MetaModel):
             view_document.add_model(part)
         return  
 
+    def copy_from_assembly(self, other: 'Assembly') -> None:
+        self.part_model_list = []   
+        for other_part_model in other.part_model_list:
+            part_model = PartModel()
+            part_model.copy_from(other_part_model)    
+            self.part_model_list.append(part_model)
+            
+        self.conectivity_dict = other.conectivity_dict
+        self.part_name = other.part_name
+        return  
+    
 class AssemblyFactory:
 
     @classmethod
@@ -166,7 +197,9 @@ class AssemblyFactory:
         return assembly
     
     @classmethod
-    def create_merged_assembly(cls, assembly: Assembly, cluster_list: list[list[int]], assembly_name: str) -> Assembly:
+    def create_merged_assembly(cls, assembly: Assembly, 
+                               cluster_list: List[List[int]], 
+                               assembly_name: str) -> Assembly:
         if cluster_list is None:   
             raise ValueError("cluster_list is None")    
         if cluster_list == [] or cluster_list == [[]]:
@@ -197,7 +230,9 @@ class AssemblyFactory:
         return merged_assembly
 
     @classmethod
-    def merge_part_model(cls, assembly: Assembly, cluster: list[int], cluster_index: int) -> PartModel:        
+    def merge_part_model(cls, assembly: Assembly, 
+                         cluster: List[int], 
+                         cluster_index: int) -> PartModel:        
         merged_part_model = PartModel()
         merged_part_model.part_name = "merged_part"
         color: str = assembly.part_model_list[cluster[0]].color
@@ -211,13 +246,16 @@ class AssemblyFactory:
             else:
                 fused_brep_shape = BRepAlgoAPI_Fuse(fused_brep_shape, part_model.brep_shape).Shape()
 
-        return cls.create_part_model(fused_brep_shape, 
+        return cls.create_part_model(brep_shape = fused_brep_shape, 
                                      part_name = "merged_part", 
                                      part_index = cluster_index,
                                      color = color)
     
     @classmethod
-    def create_part_model(cls, brep_shape: TopoDS_Shape, part_name: str = "part", part_index: Optional[int] = None, color: str = "red") -> PartModel: 
+    def create_part_model(cls, brep_shape: TopoDS_Shape, 
+                          part_name: str = "part", 
+                          part_index: Optional[int] = None, 
+                          color: str = "red") -> PartModel: 
         bnd_box = Bnd_Box()
         brepbndlib.Add(brep_shape, bnd_box) 
         mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
@@ -232,7 +270,7 @@ class AssemblyFactory:
         return part_model
         
     @classmethod
-    def create_part_connectivity_dict(cls, part_model_list: list[PartModel]) -> dict[int, int]:
+    def create_part_connectivity_dict(cls, part_model_list: List[PartModel]) -> Dict[int, int]:
         conectivity_dict: dict[int, list[int]] = {}
         
         for part_model in part_model_list:   
@@ -253,9 +291,21 @@ class AssemblyFactory:
 
 
 if __name__ == "__main__":
-    assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
-    view_document = ViewDocument()
-    
-    assembly.add_to_view_document(view_document)
-    print(assembly.conectivity_dict)
-    view_document.display()
+    def assembly_example_code():
+        assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
+        view_document = ViewDocument()
+        
+        assembly.add_to_view_document(view_document)
+        print(assembly.conectivity_dict)
+        view_document.display()
+        
+    def simplify_example_code():
+        assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
+        for part_model in assembly.part_model_list:
+            part_model.simplify(0.9)    
+            
+        view_document = ViewDocument()
+        assembly.add_to_view_document(view_document)    
+        view_document.display()
+
+    simplify_example_code()

@@ -1,7 +1,7 @@
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
-from OCC.Core.BRep import BRep_Tool_Triangulation
-from OCC.Core.BRepTools import breptools_Clean
-from OCC.Core.TopoDS import TopoDS_Compound, TopoDS_Iterator, TopoDS_Shape
+from OCC.Core.BRep import BRep_Tool
+from OCC.Core.BRepTools import breptools
+from OCC.Core.TopoDS import TopoDS_Shape
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_FACE
 from OCC.Core.TopLoc import TopLoc_Location
@@ -9,7 +9,7 @@ from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.Graphic3d import Graphic3d_Vec3d
 from OCC.Core.Prs3d import prs3d
-from OCC.Core.Precision import precision_Confusion
+from OCC.Core.Precision import precision
 from OCC.Core.gp import gp_Pnt
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakeBox
@@ -54,7 +54,7 @@ class ShapeToMeshConvertor:
             gvec2 = Graphic3d_Vec3d(*bnd_box.CornerMax().Coord())
             deflection = prs3d.GetDeflection(gvec1, gvec2, 0.001)
 
-            line_deflaction = max(deflection, precision_Confusion())
+            line_deflaction = max(deflection, precision.Confusion())
 
             return line_deflaction
         bnd_box = Bnd_Box()
@@ -62,7 +62,7 @@ class ShapeToMeshConvertor:
         
         angle_deflection = calculate_angle_deflection()
         line_deflaction = calculate_line_deflection(bnd_box)
-        breptools_Clean(shape)
+        breptools.Clean(shape)
         bmesh = BRepMesh_IncrementalMesh(
             shape, line_deflaction, False, angle_deflection, False)
         return bmesh
@@ -71,8 +71,8 @@ class ShapeToMeshConvertor:
     def init_triangle_mesh(cls, mesh_vertices, mesh_faces, face) -> None:
         before_vertices_number = len(mesh_vertices)
         loc = TopLoc_Location()
-
-        poly = BRep_Tool_Triangulation(face, loc)
+        
+        poly = BRep_Tool.Triangulation(face, loc)
         if (poly is None):
             return
         

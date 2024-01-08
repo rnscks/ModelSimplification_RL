@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-
+from typing import List
 from pytorch3d import loss
 from pytorch3d.structures import Pointclouds, Meshes
 
@@ -23,7 +23,9 @@ class ChamferDistance(Evaluator):
         super().__init__()  
 
   
-    def evaluate(self, model: PartModel, other_model: PartModel) -> float:
+    def evaluate(self, 
+                 model: PartModel, 
+                 other_model: PartModel) -> float:
         p1: Pointclouds = model.torch_point_cloud
         p2: Pointclouds = other_model.torch_point_cloud
         
@@ -50,7 +52,9 @@ class ChamferDistanceAssembly(Evaluator):
         super().__init__()  
         
         
-    def evaluate(self, assembly: Assembly, other_assembly: Assembly) -> float:
+    def evaluate(self, 
+                 assembly: Assembly, 
+                 other_assembly: Assembly) -> float:
         if len(assembly.part_model_list) != len(other_assembly.part_model_list):    
             raise ValueError("assembly and other_assembly must have same length")   
         
@@ -70,19 +74,19 @@ class Cluster(ABC):
         
         
     @abstractmethod
-    def cluster(self, assembly: Assembly) -> list[list[int]]:
+    def cluster(self, assembly: Assembly) -> List[List[int]]:
         pass    
     
 class RegionGrowing(Cluster):
     def __init__(self, growing_ratio: float = 0.5) -> None:
         super().__init__()  
         self.growing_ratio: float = growing_ratio  
-        self.closed_list: list[int] = []    
-        self.cluster_list: list[list[int]] = []
+        self.closed_list: List[int] = []    
+        self.cluster_list: List[List[int]] = []
         
         
-    def cluster(self, assembly: Assembly) -> list[list[int]]:
-        cluster: list[int] = []
+    def cluster(self, assembly: Assembly) -> List[List[int]]:
+        cluster: List[int] = []
         
         for part_model in assembly.part_model_list:
             part_index: int = part_model.part_index    
@@ -99,7 +103,11 @@ class RegionGrowing(Cluster):
         self.set_part_model_color(assembly)
         return self.cluster_list
     
-    def growing(self, part_index: int, assembly: Assembly, cluster: list[int], seed_number: float) -> None:
+    def growing(self, 
+                part_index: int, 
+                assembly: Assembly, 
+                cluster: List[int], 
+                seed_number: float) -> None:
         if part_index in self.closed_list:  
             return None 
 
@@ -121,6 +129,7 @@ class RegionGrowing(Cluster):
     def set_part_model_color(self, assembly: Assembly) -> None:
         colors = ["red", "blue", "yellow", "purple", "green", "orange", "pink", "brown", "gray", "black"]
         for cluster_index, cluster in enumerate(self.cluster_list):
+            cluster_index = cluster_index % len(colors) 
             for part_index in cluster:
                 assembly.part_model_list[part_index].color = colors[cluster_index]    
         return None

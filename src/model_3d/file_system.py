@@ -1,6 +1,6 @@
 from OCC.Core.STEPControl import STEPControl_Reader
 from OCC.Core.TopoDS import TopoDS_Compound
-
+# for example code
 from OCC.Display.SimpleGui import init_display
 
 class FileReader:
