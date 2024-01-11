@@ -11,6 +11,8 @@ import pyvista as pv
 import torch
 from pytorch3d import loss
 from pytorch3d.structures import Pointclouds, Meshes
+from pytorch3d.ops import sample_points_from_meshes
+
 
 from model_3d.file_system import FileReader    
 from model_3d.tessellator.brep_convertor import ShapeToMeshConvertor
@@ -45,6 +47,8 @@ class ViewDocument:
         for model in self.model_list:
             if model.vista_mesh is None or model.is_visible is False:
                 continue
+            if model.vista_mesh.n_faces_strict == 0:
+                continue
             plotter.add_mesh(model.vista_mesh, color=model.color, opacity=model.tranparency)    
             
         plotter.show()
@@ -72,24 +76,31 @@ class PartModel(MetaModel):
         if self.vista_mesh.n_faces_strict == 0:
             return 0
         before_faces = self.vista_mesh.n_faces_strict
+        self.vista_mesh.clean()
         self.vista_mesh = self.vista_mesh.triangulate()
         self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
         after_faces = self.vista_mesh.n_faces_strict
         self.init_torch_property()  
+        
         return before_faces - after_faces
         
     def init_torch_property(self) -> None:
         points = self.vista_mesh.points
         faces = self.vista_mesh.faces  
         
+        
         torch_points = torch.tensor(points, dtype=torch.float32)
         torch_faces = torch.tensor(faces, dtype=torch.int64)    
         torch_faces = torch_faces.reshape(-1, 4)[:, 1:4]
         torch_points = torch_points.view(1, -1, 3)
         torch_faces = torch_faces.view(1, -1, 3)
-        
         self.torch_mesh = Meshes(torch_points, torch_faces)  
-        self.torch_point_cloud = Pointclouds(torch_points)
+        if self.torch_mesh.isempty():
+            self.torch_point_cloud = Pointclouds(torch_points)  
+            return
+        sampled_points = sample_points_from_meshes(self.torch_mesh, 1000)  
+        sampled_points = sampled_points.view(1, -1, 3)  
+        self.torch_point_cloud = Pointclouds(sampled_points)
         return
         
     def add_to_view_document(self, view_document: ViewDocument) -> None:   

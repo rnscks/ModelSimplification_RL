@@ -26,6 +26,8 @@ class ChamferDistance(Evaluator):
     def evaluate(self, 
                  model: PartModel, 
                  other_model: PartModel) -> float:
+    
+        
         p1: Pointclouds = model.torch_point_cloud
         p2: Pointclouds = other_model.torch_point_cloud
         
