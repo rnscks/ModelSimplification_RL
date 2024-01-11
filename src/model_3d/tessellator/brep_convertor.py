@@ -14,11 +14,9 @@ from OCC.Core.gp import gp_Pnt
 from OCC.Core.Bnd import Bnd_Box
 from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakeBox
 import pyvista as pv    
-import open3d as o3d
 
 
 class ShapeToMeshConvertor:
-    
     @classmethod    
     def convert_to_pyvista_mesh(cls, brep_shape: TopoDS_Shape) -> pv.PolyData:
         cls.init_brep_mesh(brep_shape)
@@ -57,14 +55,14 @@ class ShapeToMeshConvertor:
             line_deflaction = max(deflection, precision.Confusion())
 
             return line_deflaction
+        
         bnd_box = Bnd_Box()
         brepbndlib.Add(shape, bnd_box)
         
         angle_deflection = calculate_angle_deflection()
         line_deflaction = calculate_line_deflection(bnd_box)
         breptools.Clean(shape)
-        bmesh = BRepMesh_IncrementalMesh(
-            shape, line_deflaction, False, angle_deflection, False)
+        bmesh = BRepMesh_IncrementalMesh(shape, line_deflaction, False, angle_deflection, False)
         return bmesh
 
     @classmethod    
@@ -99,8 +97,8 @@ class ShapeToMeshConvertor:
 
 
 if __name__ == "__main__":
+    # visual test
     box_shape = BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), gp_Pnt(1, 1, 1)).Shape()
     mesh = ShapeToMeshConvertor.convert_to_pyvista_mesh(box_shape)
     
     mesh.plot()
-

@@ -3,10 +3,8 @@ from typing import List
 from pytorch3d import loss
 from pytorch3d.structures import Pointclouds, Meshes
 
-from model_3d.cad_model import MetaModel, Assembly, PartModel
-# for example code
-from model_3d.cad_model import AssemblyFactory, ViewDocument
-from model_3d.cad_model import MetaModel
+from src.model_3d.cad_model import MetaModel, Assembly, PartModel
+
 
 
 class Evaluator(ABC):
@@ -143,27 +141,3 @@ class RegionGrowing(Cluster):
                 assembly.part_model_list[part_index].color = colors[cluster_index]    
         return None
     
-        
-if __name__ == "__main__":
-    def region_growing_example():
-        air_compressor = AssemblyFactory.create_assembly("AirCompressor.stp") 
-        cluster_list: list[int] = RegionGrowing(growing_ratio=0.5).cluster(air_compressor)
-        colors = ["red", "blue", "yellow", "purple", "green", "orange", "pink", "brown", "gray", "black"]
-        for cluster_index, cluster in enumerate(cluster_list):
-            for part_index in cluster:
-                air_compressor.part_model_list[part_index].color = colors[cluster_index]    
-        view_document = ViewDocument()  
-        air_compressor.add_to_view_document(view_document)
-        view_document.display()
-
-    def chamfer_distance_example():
-        air_compressor = AssemblyFactory.create_assembly("AirCompressor.stp")
-        model1 = air_compressor.part_model_list[0]
-        model2 = air_compressor.part_model_list[1]
-        print(ChamferDistance().evaluate(model1, model2))   
-        
-    def point_to_mesh_distance_example():   
-        air_compressor = AssemblyFactory.create_assembly("AirCompressor.stp")
-        model1 = air_compressor.part_model_list[0]
-        model2 = air_compressor.part_model_list[1]
-        print(PointToMeshDistance().evaluate(model1, model2))

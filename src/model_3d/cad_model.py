@@ -9,14 +9,11 @@ from OCC.Core.BRepBndLib import brepbndlib
 from OCC.Core.TopAbs import TopAbs_OUT
 import pyvista as pv
 import torch
-from pytorch3d import loss
 from pytorch3d.structures import Pointclouds, Meshes
 from pytorch3d.ops import sample_points_from_meshes
 
-
-from model_3d.file_system import FileReader    
-from model_3d.tessellator.brep_convertor import ShapeToMeshConvertor
-
+from src.model_3d.tessellator.brep_convertor import ShapeToMeshConvertor
+from src.model_3d.file_system import FileReader    
 
 class MetaModel(ABC):
     def __init__(self, part_name: Optional[str] = None):        
@@ -56,33 +53,48 @@ class ViewDocument:
 
 class PartModel(MetaModel):
     def __init__(self, 
-                 part_name: str = "part model", 
-                 brep_shape: Optional[TopoDS_Shape] = None, 
-                 vista_mesh: Optional[pv.PolyData] = None, 
-                 bnd_box: Optional[Bnd_Box] = None, 
-                 part_index: Optional[int] = None) -> None:   
+                part_name: str = "part model", 
+                brep_shape: Optional[TopoDS_Shape] = None, 
+                vista_mesh: Optional[pv.PolyData] = None, 
+                bnd_box: Optional[Bnd_Box] = None, 
+                part_index: Optional[int] = None) -> None:   
         
         super().__init__(part_name)
         self.brep_shape: Optional[TopoDS_Shape] = brep_shape
-        self.bnd_box: Optional[Bnd_Box] = bnd_box
+        
         self.part_index: Optional[int] = part_index
         self.torch_mesh: Optional[Meshes] = None 
         self.torch_point_cloud: Optional[Pointclouds] = None    
-        self.vista_mesh = vista_mesh
         
-    def simplify(self, simplified_ratio: float) -> int: 
+        if bnd_box is None and brep_shape is not None:  
+            self.bnd_box = Bnd_Box()
+            brepbndlib.Add(brep_shape, self.bnd_box)
+        else:
+            self.bnd_box: Optional[Bnd_Box] = bnd_box
+            
+        if vista_mesh is None and brep_shape is not None:
+            self.vista_mesh = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
+        else:
+            self.vista_mesh: Optional[pv.PolyData] = vista_mesh
+            
+        if vista_mesh is not None:
+            self.vista_mesh.clean()
+            self.vista_mesh = self.vista_mesh.triangulate()
+            self.init_torch_property()
+            
+        
+    def simplify(self, simplified_ratio: float) -> None: 
         if self.vista_mesh is None:
             return 0
         if self.vista_mesh.n_faces_strict == 0:
             return 0
-        before_faces = self.vista_mesh.n_faces_strict
+        
         self.vista_mesh.clean()
         self.vista_mesh = self.vista_mesh.triangulate()
         self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
-        after_faces = self.vista_mesh.n_faces_strict
         self.init_torch_property()  
         
-        return before_faces - after_faces
+        return
         
     def init_torch_property(self) -> None:
         points = self.vista_mesh.points
@@ -108,10 +120,15 @@ class PartModel(MetaModel):
         return
         
     def copy_from(self, other: 'PartModel') -> None: 
-        self.brep_shape = other.brep_shape
-        self.vista_mesh = pv.PolyData(other.vista_mesh.points, other.vista_mesh.faces)
-        self.vista_mesh = self.vista_mesh.triangulate()
+        if other.brep_shape is None:
+            raise ValueError("copy from: other.brep_shape is None")    
+        if other.torch_point_cloud is None or other.torch_mesh is None:
+            other.init_torch_property()
         
+        self.brep_shape = other.brep_shape
+        self.vista_mesh = pv.PolyData()
+        self.vista_mesh.deep_copy(other.vista_mesh)
+        self.vista_mesh = self.vista_mesh.triangulate()
         self.bnd_box = other.bnd_box    
         self.init_torch_property()
         self.part_index = other.part_index  
@@ -125,10 +142,10 @@ class PartModel(MetaModel):
         if self.bnd_box is None or other.bnd_box is None:
             return False
         
-        return self.bnd_box.IsOut(other.bnd_box) == TopAbs_OUT
+        return not self.bnd_box.IsOut(other.bnd_box) == TopAbs_OUT
     
     def __eq__(self, other: 'PartModel') -> bool:
-        return self.brep_shape.IsEqual(other.brep_shape)       
+        return self.vista_mesh == other.vista_mesh  
 
 class Assembly(MetaModel):
     def __init__(self, assemply_name: Optional[str] = None) -> None:
