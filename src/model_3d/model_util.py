@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from multipledispatch import dispatch
 from typing import List
 from pytorch3d import loss
+from pytorch3d.loss.point_mesh_distance import point_mesh_face_distance
 from pytorch3d.structures import Pointclouds, Meshes
 
 from src.model_3d.cad_model import MetaModel, Assembly, PartModel
@@ -19,11 +21,11 @@ class Evaluator(ABC):
 class ChamferDistance(Evaluator):
     def __init__(self) -> None:
         super().__init__()  
-
-  
+        
+    @dispatch(PartModel, PartModel)
     def evaluate(self, 
-                 model: PartModel, 
-                 other_model: PartModel) -> float:
+                model: PartModel, 
+                other_model: PartModel) -> float:
     
         
         p1: Pointclouds = model.torch_point_cloud
@@ -34,39 +36,60 @@ class ChamferDistance(Evaluator):
                                                         single_directional=False)
         
         return chamfer_distance_loss.item()
-
+    @dispatch(Meshes, Meshes)   
+    def evaluate(self,
+                mesh: Meshes, 
+                other_mesh: Meshes) -> float:
+        
+            chamfer_distance_loss, loss_normal = loss.chamfer_distance(mesh, other_mesh, 
+                                                            point_reduction="mean", 
+                                                            single_directional=False)
+            
+            return chamfer_distance_loss.item() 
+        
+    @dispatch(Pointclouds, Pointclouds)
+    def evaluate(self,
+                point_cloud: Pointclouds, 
+                other_point_cloud: Pointclouds) -> float:
+        
+            chamfer_distance_loss, loss_normal = loss.chamfer_distance(point_cloud, other_point_cloud, 
+                                                            point_reduction="mean", 
+                                                            single_directional=False)
+            
+            return chamfer_distance_loss.item() 
+        
+    @dispatch(Assembly, Assembly)
+    def evaluate(self,
+                assembly: Assembly,
+                other_assembly: Assembly) -> float:
+        
+        if len(assembly.part_model_list) != len(other_assembly.part_model_list):
+            raise ValueError("assembly and other_assembly must have same length")
+        sum_of_chamfer_distance: float = 0.0
+        for part_index in range(len(assembly.part_model_list)):
+            part_model = assembly.part_model_list[part_index]
+            other_part_model = other_assembly.part_model_list[part_index]
+            
+            chamfer_distance = self.evaluate(part_model, other_part_model)
+            
+            sum_of_chamfer_distance += chamfer_distance 
+        return sum_of_chamfer_distance
+        
 class PointToMeshDistance(Evaluator):   
     def __init__(self) -> None:
         super().__init__()
         
     def evaluate(self, model: PartModel, other_model: PartModel) -> float:
-        pmd1 = loss.point_mesh_distance.point_mesh_face_distance(model.torch_mesh, 
-                                                                 other_model.torch_point_cloud).item()
+        pmd1 = point_mesh_face_distance(
+            model.torch_mesh, 
+            other_model.torch_point_cloud).item()
         
-        pmd2 = loss.point_mesh_distance.point_mesh_face_distance(other_model.torch_mesh, 
-                                                                 model.torch_point_cloud).item()   
+        pmd2 = point_mesh_face_distance(
+            other_model.torch_mesh, 
+            model.torch_point_cloud).item()  
+        
         return (pmd1 + pmd2) * 0.5
 
-class ChamferDistanceAssembly(Evaluator):   
-    def __init__(self) -> None:
-        super().__init__()  
-        
-        
-    def evaluate(self, 
-                 assembly: Assembly, 
-                 other_assembly: Assembly) -> float:
-        if len(assembly.part_model_list) != len(other_assembly.part_model_list):    
-            raise ValueError("assembly and other_assembly must have same length")   
-        
-        sum_of_chamfer_distance: float = 0.0    
-        for part_index in range(len(assembly.part_model_list)):
-            part_model = assembly.part_model_list[part_index]
-            other_part_model = other_assembly.part_model_list[part_index]   
-            
-            chamfer_distance: float = ChamferDistance().evaluate(part_model, other_part_model)    
-            sum_of_chamfer_distance += chamfer_distance
-
-        return sum_of_chamfer_distance
 
 class Cluster(ABC):
     def __init__(self) -> None:

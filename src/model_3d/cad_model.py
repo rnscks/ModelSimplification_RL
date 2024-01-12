@@ -46,7 +46,7 @@ class ViewDocument:
                 continue
             if model.vista_mesh.n_faces_strict == 0:
                 continue
-            plotter.add_mesh(model.vista_mesh, color=model.color, opacity=model.tranparency)    
+            plotter.add_mesh(model.vista_mesh, color = model.color, opacity = model.tranparency)    
             
         plotter.show()
         return  
@@ -57,30 +57,44 @@ class PartModel(MetaModel):
                 brep_shape: Optional[TopoDS_Shape] = None, 
                 vista_mesh: Optional[pv.PolyData] = None, 
                 bnd_box: Optional[Bnd_Box] = None, 
-                part_index: Optional[int] = None) -> None:   
-        
+                part_index: Optional[int] = None) -> None:
         super().__init__(part_name)
         self.brep_shape: Optional[TopoDS_Shape] = brep_shape
-        
         self.part_index: Optional[int] = part_index
         self.torch_mesh: Optional[Meshes] = None 
-        self.torch_point_cloud: Optional[Pointclouds] = None    
+        self.torch_point_cloud: Optional[Pointclouds] = None
         
-        if bnd_box is None and brep_shape is not None:  
+        if bnd_box is None and isinstance(brep_shape, TopoDS_Shape):  
             self.bnd_box = Bnd_Box()
             brepbndlib.Add(brep_shape, self.bnd_box)
         else:
             self.bnd_box: Optional[Bnd_Box] = bnd_box
-            
-        if vista_mesh is None and brep_shape is not None:
+        
+        if vista_mesh is None and isinstance(brep_shape, TopoDS_Shape):
             self.vista_mesh = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
         else:
             self.vista_mesh: Optional[pv.PolyData] = vista_mesh
             
-        if vista_mesh is not None:
+        if isinstance(self.vista_mesh, pv.PolyData):
             self.vista_mesh.clean()
             self.vista_mesh = self.vista_mesh.triangulate()
-            self.init_torch_property()
+            points = self.vista_mesh.points
+            faces = self.vista_mesh.faces  
+            
+            torch_points = torch.tensor(points, dtype=torch.float32)
+            torch_faces = torch.tensor(faces, dtype=torch.int64)    
+            
+            torch_points = torch_points.view(1, -1, 3)
+            torch_faces = torch_faces.reshape(-1, 4)[:, 1:4]
+            torch_faces = torch_faces.view(1, -1, 3)
+            
+            self.torch_mesh = Meshes(torch_points, torch_faces)  
+            self.torch_point_cloud = Pointclouds(torch_points)  
+            if not self.torch_mesh.isempty():
+                sampled_points = sample_points_from_meshes(self.torch_mesh, 1000)  
+                sampled_points = sampled_points.view(1, -1, 3)  
+                self.torch_point_cloud = Pointclouds(sampled_points)
+        return
             
         
     def simplify(self, simplified_ratio: float) -> None: 
@@ -92,14 +106,43 @@ class PartModel(MetaModel):
         self.vista_mesh.clean()
         self.vista_mesh = self.vista_mesh.triangulate()
         self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
-        self.init_torch_property()  
+        self.__init_torch_property()  
         
         return
+
+    def add_to_view_document(self, view_document: ViewDocument) -> None:   
+        view_document.add_model(self)
+        return
         
-    def init_torch_property(self) -> None:
+    def copy_from(self, other: 'PartModel') -> None: 
+        if other.brep_shape is None:
+            raise ValueError("copy from: other.brep_shape is None")    
+        if other.torch_point_cloud is None or other.torch_mesh is None:
+            other.__init_torch_property()
+        
+        self.brep_shape = other.brep_shape
+        self.vista_mesh = pv.PolyData()
+        self.vista_mesh.deep_copy(other.vista_mesh)
+        self.vista_mesh.clean()
+        self.vista_mesh = self.vista_mesh.triangulate()
+        self.bnd_box = other.bnd_box    
+        self.__init_torch_property()
+        self.part_index = other.part_index  
+        self.color = other.color
+        return
+    
+    def get_volume(self) -> float:
+        return self.vista_mesh.volume
+    
+    def is_neighbor(self, other: 'PartModel') -> bool:  
+        if self.bnd_box is None or other.bnd_box is None:
+            return False
+        
+        return not self.bnd_box.IsOut(other.bnd_box) == TopAbs_OUT
+    
+    def __init_torch_property(self) -> None:
         points = self.vista_mesh.points
         faces = self.vista_mesh.faces  
-        
         
         torch_points = torch.tensor(points, dtype=torch.float32)
         torch_faces = torch.tensor(faces, dtype=torch.int64)    
@@ -114,39 +157,8 @@ class PartModel(MetaModel):
         sampled_points = sampled_points.view(1, -1, 3)  
         self.torch_point_cloud = Pointclouds(sampled_points)
         return
-        
-    def add_to_view_document(self, view_document: ViewDocument) -> None:   
-        view_document.add_model(self)
-        return
-        
-    def copy_from(self, other: 'PartModel') -> None: 
-        if other.brep_shape is None:
-            raise ValueError("copy from: other.brep_shape is None")    
-        if other.torch_point_cloud is None or other.torch_mesh is None:
-            other.init_torch_property()
-        
-        self.brep_shape = other.brep_shape
-        self.vista_mesh = pv.PolyData()
-        self.vista_mesh.deep_copy(other.vista_mesh)
-        self.vista_mesh = self.vista_mesh.triangulate()
-        self.bnd_box = other.bnd_box    
-        self.init_torch_property()
-        self.part_index = other.part_index  
-        self.color = other.color
-        return
     
-    def get_volume(self) -> float:
-        return self.vista_mesh.volume
     
-    def is_neighbor(self, other: 'PartModel') -> bool:  
-        if self.bnd_box is None or other.bnd_box is None:
-            return False
-        
-        return not self.bnd_box.IsOut(other.bnd_box) == TopAbs_OUT
-    
-    def __eq__(self, other: 'PartModel') -> bool:
-        return self.vista_mesh == other.vista_mesh  
-
 class Assembly(MetaModel):
     def __init__(self, assemply_name: Optional[str] = None) -> None:
         super().__init__(assemply_name)
@@ -193,7 +205,6 @@ class Assembly(MetaModel):
         return  
     
 class AssemblyFactory:
-
     @classmethod
     def create_assembly(cls, stp_file_path: str) -> Assembly:
         assembly = Assembly()   
@@ -214,7 +225,7 @@ class AssemblyFactory:
                 continue
 
             part_model_list.append(cls.create_part_model(brep_shape = brep_shape, 
-                                                         part_index = part_index))
+                                                        part_index = part_index))
             shape_iter.Next()
             part_index += 1
             
@@ -261,8 +272,8 @@ class AssemblyFactory:
 
     @classmethod
     def merge_part_model(cls, assembly: Assembly, 
-                         cluster: List[int], 
-                         cluster_index: int) -> PartModel:        
+                        cluster: List[int], 
+                        cluster_index: int) -> PartModel:        
         merged_part_model = PartModel()
         merged_part_model.part_name = "merged_part"
         color: str = assembly.part_model_list[cluster[0]].color
@@ -280,17 +291,17 @@ class AssemblyFactory:
                 fused_vista_mesh += part_model.vista_mesh   
 
         return cls.create_part_model(brep_shape = fused_brep_shape,
-                                     vista_mesh = fused_vista_mesh, 
-                                     part_name = "merged_part", 
-                                     part_index = cluster_index,
-                                     color = color)
+                                    vista_mesh = fused_vista_mesh, 
+                                    part_name = "merged_part", 
+                                    part_index = cluster_index,
+                                    color = color)
     
     @classmethod
     def create_part_model(cls, brep_shape: TopoDS_Shape, 
-                          vista_mesh: Optional[pv.PolyData] = None, 
-                          part_name: str = "part", 
-                          part_index: Optional[int] = None, 
-                          color: str = "red") -> PartModel: 
+                        vista_mesh: Optional[pv.PolyData] = None, 
+                        part_name: str = "part", 
+                        part_index: Optional[int] = None, 
+                        color: str = "red") -> PartModel: 
         bnd_box = Bnd_Box()
         brepbndlib.Add(brep_shape, bnd_box) 
         
@@ -305,7 +316,6 @@ class AssemblyFactory:
                         bnd_box = bnd_box,
                         part_index = part_index)
         part_model.color = color
-        part_model.init_torch_property()
         return part_model
         
     @classmethod

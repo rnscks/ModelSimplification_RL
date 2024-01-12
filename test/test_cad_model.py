@@ -52,7 +52,6 @@ class PartModelTests(unittest.TestCase):
         return   
         
     def test_init_torch_property(self) -> None:
-        self.part_model.init_torch_property()
         self.assertIsNotNone(self.part_model.torch_mesh)
         self.assertIsNotNone(self.part_model.torch_point_cloud)
         
@@ -62,9 +61,8 @@ class PartModelTests(unittest.TestCase):
 
     def test_copy_from(self) -> None:
         other_part_model = PartModel()
-        self.part_model.init_torch_property()
         other_part_model.copy_from(self.part_model)
-        
+                
         self.assertTrue(other_part_model.brep_shape.IsEqual(self.part_model.brep_shape))    
         self.assertTrue(other_part_model.vista_mesh.n_faces_strict == self.part_model.vista_mesh.n_faces_strict)    
         self.assertTrue(other_part_model.vista_mesh.n_points == self.part_model.vista_mesh.n_points)    
@@ -126,25 +124,6 @@ class PartModelTests(unittest.TestCase):
         self.assertTrue(is_neighbor, bool)
         return  
 
-    def test_not_eq(self) -> None:
-        other_part_model = PartModel()
-        other_part_model.copy_from(self.part_model) 
-        other_part_model.simplify(0.5)  
-        are_equal = self.part_model == other_part_model
-
-        self.assertIsInstance(are_equal, bool)
-        self.assertEqual(are_equal, False)
-        return
-    
-    def test_eq(self) -> None:
-        other_part_model = PartModel()  
-        other_part_model.copy_from(self.part_model) 
-        are_equal = self.part_model == other_part_model
-        
-        self.assertIsInstance(are_equal, bool)  
-        self.assertEqual(are_equal, True)   
-        return
-
 class AssemblyFactoryTests(unittest.TestCase):
     def test_create_assembly(self) -> None:
         assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
@@ -164,7 +143,7 @@ class AssemblyFactoryTests(unittest.TestCase):
     
     def test_create_merged_assembly(self) -> None:
         assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
-        cluster_list: list[list[int]] = RegionGrowing().cluster(0)
+        cluster_list: list[list[int]] = RegionGrowing().cluster(assembly)
         merged_assembly: Assembly =\
             AssemblyFactory.create_merged_assembly(
                 assembly = assembly, 
@@ -180,12 +159,39 @@ class AssemblyFactoryTests(unittest.TestCase):
             self.assertIsNotNone(part_model.torch_mesh)
             self.assertIsNotNone(part_model.torch_point_cloud)
         return
-        
-    
-    
-        
-    
 
+class AssemblyTests(unittest.TestCase): 
+    def setUp(self) -> None:
+        self.test_assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
+    
+    
+    def test_part_model(self) -> None:
+        for part_model in self.test_assembly.part_model_list:
+            self.assertIsInstance(part_model, PartModel)
+            self.assertIsNotNone(part_model.brep_shape) 
+            self.assertIsNotNone(part_model.vista_mesh)
+            self.assertIsNotNone(part_model.bnd_box)
+            self.assertIsNotNone(part_model.part_index)
+            self.assertIsNotNone(part_model.torch_mesh)
+            self.assertIsNotNone(part_model.torch_point_cloud)
+        
+        return
+    
+    def test_copy_from(self) -> None:
+        copy_assembly = Assembly()
+        copy_assembly.copy_from_assembly(self.test_assembly)
+        
+        for part_model in copy_assembly.part_model_list:
+            self.assertIsInstance(part_model, PartModel)
+            self.assertIsNotNone(part_model.brep_shape)
+            self.assertIsNotNone(part_model.vista_mesh)
+            self.assertIsNotNone(part_model.bnd_box)
+            self.assertIsNotNone(part_model.part_index)
+            self.assertIsNotNone(part_model.torch_mesh)
+            self.assertIsNotNone(part_model.torch_point_cloud)
+
+        return
+        
 
 if __name__ == '__main__':
     unittest.main()
