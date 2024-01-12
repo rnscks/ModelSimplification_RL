@@ -1,5 +1,5 @@
 import unittest
-
+import random
 from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakeBox
 
 from src.model_3d.cad_model import PartModel, AssemblyFactory, Assembly
@@ -45,12 +45,17 @@ class RegionGrowingTests(unittest.TestCase):
         while True:
             if len(assembly.part_model_list) == 1:
                 break
-            cluster_list = RegionGrowing().cluster(assembly)    
+            seed_index = random.randint(0, len(assembly.part_model_list) - 1)   
+            cluster_list = RegionGrowing(growing_ratio=1.5).cluster(assembly, seed_index)   
             self.assertIsInstance(cluster_list, list)
             assembly = AssemblyFactory.create_merged_assembly(assembly, cluster_list, "Merged AirCompressor")
             self.assertIsInstance(assembly, Assembly)
-            
         
+        seed_index = 0
+        cluster_list = RegionGrowing(growing_ratio=1.5).cluster(assembly, seed_index)   
+        self.assertIsInstance(cluster_list, list)   
+        assembly = AssemblyFactory.create_merged_assembly(assembly, cluster_list, "Merged AirCompressor")
+        self.assertIsInstance(assembly, Assembly)
         return
 
 if __name__ == '__main__':

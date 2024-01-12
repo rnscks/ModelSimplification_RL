@@ -75,7 +75,7 @@ class PartModel(MetaModel):
         else:
             self.vista_mesh: Optional[pv.PolyData] = vista_mesh
             
-        if isinstance(self.vista_mesh, pv.PolyData):
+        if isinstance(self.vista_mesh, pv.PolyData) and self.vista_mesh.n_faces_strict != 0:
             self.vista_mesh.clean()
             self.vista_mesh = self.vista_mesh.triangulate()
             points = self.vista_mesh.points
@@ -99,15 +99,14 @@ class PartModel(MetaModel):
         
     def simplify(self, simplified_ratio: float) -> None: 
         if self.vista_mesh is None:
-            return 0
+            return
         if self.vista_mesh.n_faces_strict == 0:
-            return 0
-        
-        self.vista_mesh.clean()
+            return
+        self.vista_mesh = self.vista_mesh.clean()
         self.vista_mesh = self.vista_mesh.triangulate()
         self.vista_mesh = self.vista_mesh.decimate(simplified_ratio)
-        self.__init_torch_property()  
-        
+        if self.vista_mesh.n_faces_strict != 0:
+            self.__init_torch_property()  
         return
 
     def add_to_view_document(self, view_document: ViewDocument) -> None:   
@@ -123,8 +122,6 @@ class PartModel(MetaModel):
         self.brep_shape = other.brep_shape
         self.vista_mesh = pv.PolyData()
         self.vista_mesh.deep_copy(other.vista_mesh)
-        self.vista_mesh.clean()
-        self.vista_mesh = self.vista_mesh.triangulate()
         self.bnd_box = other.bnd_box    
         self.__init_torch_property()
         self.part_index = other.part_index  
@@ -132,6 +129,10 @@ class PartModel(MetaModel):
         return
     
     def get_volume(self) -> float:
+        if self.vista_mesh is None:
+            return 0.0  
+        elif self.vista_mesh.n_faces_strict == 0:
+            return 0.0  
         return self.vista_mesh.volume
     
     def is_neighbor(self, other: 'PartModel') -> bool:  
@@ -174,7 +175,8 @@ class Assembly(MetaModel):
         
         sum_of_face_number: int = 0
         for part in self.part_model_list:
-            sum_of_face_number += part.vista_mesh.n_faces_strict
+            if isinstance(part.vista_mesh, pv.PolyData):
+                sum_of_face_number += part.vista_mesh.n_faces_strict
 
         return sum_of_face_number   
     
@@ -250,7 +252,8 @@ class AssemblyFactory:
         
         merged_assembly = Assembly()   
         merged_assembly.part_name = assembly_name
-                
+        
+        # merge part model  
         part_model_list: list[PartModel] = []
         for cluster_index, cluster in enumerate(cluster_list):
             if len(cluster) == 1:
@@ -263,7 +266,11 @@ class AssemblyFactory:
             part_model_list.append(merged_part_model)  
             
         merged_assembly.part_model_list = part_model_list 
+        # reindxing
+        for part_index, part_model in enumerate(part_model_list):
+            part_model.part_index = part_index
         
+        # create connectivity dict
         connectivity_dict: dict[int, list[int]] = \
             cls.create_part_connectivity_dict(part_model_list)
         merged_assembly.conectivity_dict = connectivity_dict   
@@ -285,10 +292,19 @@ class AssemblyFactory:
             
             if fused_brep_shape.IsNull():
                 fused_brep_shape = part_model.brep_shape
-                fused_vista_mesh = part_model.vista_mesh
+                if part_model.vista_mesh is not None and isinstance(part_model.vista_mesh, pv.PolyData):  
+                    fused_vista_mesh = part_model.vista_mesh
             else:
                 fused_brep_shape = BRepAlgoAPI_Fuse(fused_brep_shape, part_model.brep_shape).Shape()
-                fused_vista_mesh += part_model.vista_mesh   
+                
+                if part_model.vista_mesh is not None and isinstance(part_model.vista_mesh, pv.PolyData):
+                    try:
+                        fused_vista_mesh += part_model.vista_mesh
+                    except AttributeError:
+                        continue
+
+                        
+
 
         return cls.create_part_model(brep_shape = fused_brep_shape,
                                     vista_mesh = fused_vista_mesh, 

@@ -31,6 +31,10 @@ class ChamferDistance(Evaluator):
         p1: Pointclouds = model.torch_point_cloud
         p2: Pointclouds = other_model.torch_point_cloud
         
+        if p1 is None or p2 is None:    
+            chamfer_distance_loss, loss_normal = 1e5, 0.0   
+            return chamfer_distance_loss
+        
         chamfer_distance_loss, loss_normal = loss.chamfer_distance(p1, p2, 
                                                         point_reduction="mean", 
                                                         single_directional=False)
@@ -40,7 +44,9 @@ class ChamferDistance(Evaluator):
     def evaluate(self,
                 mesh: Meshes, 
                 other_mesh: Meshes) -> float:
-        
+            if mesh is None or other_mesh is None:
+                chamfer_distance_loss, loss_normal = 1e5, 0.0   
+                return chamfer_distance_loss    
             chamfer_distance_loss, loss_normal = loss.chamfer_distance(mesh, other_mesh, 
                                                             point_reduction="mean", 
                                                             single_directional=False)
@@ -51,7 +57,9 @@ class ChamferDistance(Evaluator):
     def evaluate(self,
                 point_cloud: Pointclouds, 
                 other_point_cloud: Pointclouds) -> float:
-        
+            if point_cloud is None or other_point_cloud is None:    
+                chamfer_distance_loss, loss_normal = 1e5, 0.0   
+                return chamfer_distance_loss    
             chamfer_distance_loss, loss_normal = loss.chamfer_distance(point_cloud, other_point_cloud, 
                                                             point_reduction="mean", 
                                                             single_directional=False)
@@ -108,29 +116,25 @@ class RegionGrowing(Cluster):
         self.cluster_list: List[List[int]] = []
         
         
-    def cluster(self, assembly: Assembly) -> List[List[int]]:
+    def cluster(self, assembly: Assembly, part_index: int = 0) -> List[List[int]]:
         cluster: List[int] = []
         if assembly.part_model_list is None:    
             raise ValueError("assembly.part_model_list must not be None")   
-        if len(assembly.part_model_list) == 1 or len(assembly.part_model_list) == 0 or len(assembly.conectivity_dict) == 0:
-            cluster.append(0)
-            self.cluster_list.append(cluster)
-            return self.cluster_list    
+        if len(assembly.part_model_list) <= part_index or part_index < 0:
+            raise ValueError("part_index must be in range of assembly.part_model_list")
+        if len(assembly.part_model_list) == 1:
+            return [[0]]    
             
-
-        for part_model in assembly.part_model_list:
-            part_index: int = part_model.part_index    
-            seed_volume: float = assembly.part_model_list[part_index].get_volume()
-            self.growing(part_index, assembly, cluster, seed_volume)
-            
-            if len(cluster) == 0:   
+        seed_volume: float = assembly.part_model_list[part_index].get_volume()
+        
+        self.growing(part_index, assembly, cluster, seed_volume)
+        
+        self.cluster_list.append(cluster)
+        for part_index in range(len(assembly.part_model_list)):
+            if part_index in cluster:
                 continue
-            
-            input_list = []
-            input_list.extend(cluster)
-            self.cluster_list.append(input_list)
-            cluster.clear() 
-            
+            self.cluster_list.append([part_index])  
+        
         self.set_part_model_color(assembly)
         return self.cluster_list
     
@@ -163,4 +167,3 @@ class RegionGrowing(Cluster):
             for part_index in cluster:
                 assembly.part_model_list[part_index].color = colors[cluster_index]    
         return None
-    

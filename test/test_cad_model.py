@@ -143,7 +143,7 @@ class AssemblyFactoryTests(unittest.TestCase):
     
     def test_create_merged_assembly(self) -> None:
         assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
-        cluster_list: list[list[int]] = RegionGrowing().cluster(assembly)
+        cluster_list: list[list[int]] = RegionGrowing().cluster(assembly, 0)
         merged_assembly: Assembly =\
             AssemblyFactory.create_merged_assembly(
                 assembly = assembly, 
