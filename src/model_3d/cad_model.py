@@ -159,6 +159,15 @@ class PartModel(MetaModel):
         self.torch_point_cloud = Pointclouds(sampled_points)
         return
     
+    def is_open(self) -> bool:
+        edges = self.vista_mesh.extract_feature_edges(boundary_edges=True,
+                                                        feature_edges=False,
+                                                        manifold_edges=False,
+                                                        non_manifold_edges=False)
+        if edges.n_points == 0:
+            return False    
+        return True
+    
     
 class Assembly(MetaModel):
     def __init__(self, assemply_name: Optional[str] = None) -> None:

@@ -167,3 +167,46 @@ class RegionGrowing(Cluster):
             for part_index in cluster:
                 assembly.part_model_list[part_index].color = colors[cluster_index]    
         return None
+
+
+import networkx as nx   
+from OCC.Core.BRepAlgoAPI import BRepAlgoAPI_Common
+from OCC.Core.BRepGProp import brepgprop
+from OCC.Core.GProp import GProp_GProps
+
+class GirvanNewman(Cluster):
+    def __init__(self) -> None:
+        super().__init__() 
+        
+        
+    def cluster(self, 
+                assembly: Assembly) -> List[List[int]]:
+        shapes = [part_model.brep_shape for part_model in assembly.part_model_list]  
+        G = self.create_graph_from_shapes(shapes)   
+        communities_generator = nx.algorithms.community.girvan_newman(G)
+        top_level_communities = next(communities_generator)
+        next_level_communities = next(communities_generator)
+
+        # 커뮤니티를 리스트로 변환하고 각 커뮤니티에 대한 노드 그룹 생성
+        communities = sorted(map(sorted, next_level_communities))
+
+        return communities
+    
+    
+    def create_graph_from_shapes(self, shapes):
+        """형상 리스트를 기반으로 그래프를 생성하는 함수"""
+        G = nx.Graph()
+        for i, shape in enumerate(shapes):
+            G.add_node(i, shape=shape)
+            for j in range(i):
+                common_area = self.calculate_common_area(shapes[i], shapes[j])
+                if common_area > 0:
+                    G.add_edge(i, j, weight=common_area)
+        return G
+    
+    def calculate_common_area(self, shape1, shape2):
+        """두 형상 사이의 겹치는 영역의 면적을 계산하는 함수"""
+        common_shape = BRepAlgoAPI_Common(shape1, shape2).Shape()
+        props = GProp_GProps()
+        brepgprop.SurfaceProperties(common_shape, props)
+        return props.Mass()
