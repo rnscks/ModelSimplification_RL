@@ -25,6 +25,10 @@ class MetaModel(ABC):
 
     @abstractmethod
     def get_volume(self) -> float:
+        """
+        추상 메서드입니다.
+        모델의 부피를 계산하여 반환합니다.
+        """
         pass
     
     def __str__(self) -> str:
@@ -34,12 +38,26 @@ class ViewDocument:
     def __init__(self) -> None:
         self.model_list: list[MetaModel] = []   
         
-    
     def add_model(self, model: MetaModel) -> None:
+        """
+        ViewDocument에 모델을 추가합니다.
+        
+        Parameters:
+            model (MetaModel): 추가할 모델 객체
+        
+        Returns:
+            None
+        """
         self.model_list.append(model)
         return  
     
     def display(self) -> None:
+        """
+        ViewDocument에 있는 모델들을 화면에 표시합니다.
+        
+        Returns:
+            None
+        """
         plotter = pv.Plotter()
         for model in self.model_list:
             if model.vista_mesh is None or model.is_visible is False:
@@ -98,6 +116,15 @@ class PartModel(MetaModel):
             
         
     def simplify(self, simplified_ratio: float) -> None: 
+        """
+        모델을 단순화합니다.
+
+        Parameters:
+            simplified_ratio (float): 모델을 얼마나 단순화할지를 나타내는 비율입니다.
+
+        Return:
+            None
+        """
         if self.vista_mesh is None:
             return
         if self.vista_mesh.n_faces_strict == 0:
@@ -110,10 +137,28 @@ class PartModel(MetaModel):
         return
 
     def add_to_view_document(self, view_document: ViewDocument) -> None:   
+        """
+        PartModel을 ViewDocument에 추가합니다.
+        
+        Parameters:
+            view_document (ViewDocument): 추가할 ViewDocument 객체
+        
+        Returns:
+            None
+        """
         view_document.add_model(self)
         return
         
     def copy_from(self, other: 'PartModel') -> None: 
+        """
+        다른 PartModel에서 속성을 복사합니다.
+
+        Parameters:
+            other (PartModel): 복사할 다른 PartModel 객체
+
+        Return:
+            None
+        """
         if other.brep_shape is None:
             raise ValueError("copy from: other.brep_shape is None")    
         if other.torch_point_cloud is None or other.torch_mesh is None:
@@ -129,19 +174,43 @@ class PartModel(MetaModel):
         return
     
     def get_volume(self) -> float:
+        """
+        PartModel의 부피를 계산하여 반환합니다.
+        
+        Returns:
+            float: PartModel의 부피
+        """
         if self.vista_mesh is None:
             return 0.0  
         elif self.vista_mesh.n_faces_strict == 0:
             return 0.0  
         return self.vista_mesh.volume
     
-    def is_neighbor(self, other: 'PartModel') -> bool:  
+    def is_neighbor(self, other: 'PartModel') -> bool:
+        """
+        주어진 다른 PartModel과 이웃인지 여부를 확인합니다.
+
+        Parameters:
+            other (PartModel): 다른 PartModel 객체
+
+        Return:
+            bool: 이웃인 경우 True, 그렇지 않은 경우 False
+        """
         if self.bnd_box is None or other.bnd_box is None:
             return False
         
         return not self.bnd_box.IsOut(other.bnd_box) == TopAbs_OUT
     
     def __init_torch_property(self) -> None:
+        """
+        토치 속성을 초기화하는 메서드입니다.
+
+        Parameters:
+            없음
+
+        Return:
+            없음
+        """
         points = self.vista_mesh.points
         faces = self.vista_mesh.faces  
         
@@ -160,6 +229,12 @@ class PartModel(MetaModel):
         return
     
     def is_open(self) -> bool:
+        """
+        해당 3D 모델이 열려 있는지 여부를 확인합니다.
+
+        Return:
+            - bool: 3D 모델이 열려 있으면 True, 그렇지 않으면 False를 반환합니다.
+        """
         edges = self.vista_mesh.extract_feature_edges(boundary_edges=True,
                                                         feature_edges=False,
                                                         manifold_edges=False,
@@ -178,7 +253,11 @@ class Assembly(MetaModel):
         self.conectivity_dict: Optional[Dict[int, List[int]]] = None 
         return
     
-    def get_face_number(self) -> int:   
+    def get_face_number(self) -> int:
+        """
+        Return:
+            정수형으로 표현된 모델의 총 면의 수를 반환합니다.
+        """
         if self.part_model_list is None:
             return 0
         
@@ -187,9 +266,15 @@ class Assembly(MetaModel):
             if isinstance(part.vista_mesh, pv.PolyData):
                 sum_of_face_number += part.vista_mesh.n_faces_strict
 
-        return sum_of_face_number   
+        return sum_of_face_number
     
-    def get_volume(self) -> float:  
+    def get_volume(self) -> float:
+        """
+        3D CAD 모델의 총 부피를 계산하여 반환합니다.
+
+        Returns:
+            float: 3D CAD 모델의 총 부피
+        """
         if self.part_model_list is None:
             return 0.0
         
@@ -200,11 +285,29 @@ class Assembly(MetaModel):
         return sum_of_volume
     
     def add_to_view_document(self, view_document: ViewDocument) -> None:
+        """
+        Assembly를 ViewDocument에 추가합니다.
+        
+        Parameters:
+            view_document (ViewDocument): 추가할 ViewDocument 객체
+        
+        Returns:
+            None
+        """
         for part in self.part_model_list:
             view_document.add_model(part)
         return  
 
     def copy_from_assembly(self, other: 'Assembly') -> None:
+        """
+        다른 어셈블리에서 모델을 복사합니다.
+
+        Parameters:
+            other ('Assembly'): 복사할 어셈블리 객체
+
+        Return:
+            None
+        """
         self.part_model_list = []   
         for other_part_model in other.part_model_list:
             part_model = PartModel()
@@ -213,11 +316,20 @@ class Assembly(MetaModel):
             
         self.conectivity_dict = other.conectivity_dict
         self.part_name = other.part_name
-        return  
-    
+        return
+
 class AssemblyFactory:
     @classmethod
     def create_assembly(cls, stp_file_path: str) -> Assembly:
+        """
+        STP 파일로부터 Assembly 객체를 생성합니다.
+        
+        Parameters:
+            stp_file_path (str): STP 파일 경로
+        
+        Returns:
+            Assembly: 생성된 Assembly 객체
+        """
         assembly = Assembly()   
         
         stp_file_path = os.path.basename(stp_file_path)
@@ -249,9 +361,54 @@ class AssemblyFactory:
         return assembly
     
     @classmethod
-    def create_merged_assembly(cls, assembly: Assembly, 
-                                cluster_list: List[List[int]], 
-                                assembly_name: str) -> Assembly:
+    def create_part_model(cls, brep_shape: TopoDS_Shape, part_index: int) -> PartModel:
+        """
+        BRep 모델로부터 PartModel 객체를 생성합니다.
+        
+        Parameters:
+            brep_shape (TopoDS_Shape): BRep 모델
+            part_index (int): PartModel의 인덱스
+        
+        Returns:
+            PartModel: 생성된 PartModel 객체
+        """
+        part_model = PartModel(part_index = part_index)
+        part_model.copy_from(brep_shape)
+        return part_model
+    
+    @classmethod
+    def create_part_connectivity_dict(cls, part_model_list: List[PartModel]) -> Dict[int, List[int]]:
+        """
+        PartModel들 간의 연결성을 나타내는 딕셔너리를 생성합니다.
+        
+        Parameters:
+            part_model_list (List[PartModel]): PartModel 리스트
+        
+        Returns:
+            Dict[int, List[int]]: PartModel들 간의 연결성을 나타내는 딕셔너리
+        """
+        connectivity_dict: Dict[int, List[int]] = {}
+        for i, part_model in enumerate(part_model_list):
+            connectivity_dict[i] = []
+            for j, other_part_model in enumerate(part_model_list):
+                if i != j and part_model.is_neighbor(other_part_model):
+                    connectivity_dict[i].append(j)
+        return connectivity_dict
+    
+    @classmethod
+    def create_merged_assembly(cls, 
+                            assembly: Assembly, 
+                            cluster_list: List[List[int]], 
+                            assembly_name: str) -> Assembly:
+        """
+        연결성을 표현하는 dict을 통해 assembly를 병합하고 반환
+        
+        Parameters:
+            part_model_list (List[PartModel]): PartModel 리스트
+        
+        Returns:
+            merged_assembly (Assembly): 병합된 Assembly 객체
+        """
         if cluster_list is None:   
             raise ValueError("cluster_list is None")    
         if cluster_list == [] or cluster_list == [[]]:
@@ -290,6 +447,17 @@ class AssemblyFactory:
     def merge_part_model(cls, assembly: Assembly, 
                         cluster: List[int], 
                         cluster_index: int) -> PartModel:        
+        """
+        연결성을 표현하는 list을 통해 assembly의 part를 병합하고 반환
+        
+        Parameters:
+            assembly (Assembly): 파트가 포함된 Assembly 객체
+            cluster: List[int]: 연결성을 표현하는 list 
+            cluster_index: int: 병합을 진행하는 cluster의 인덱스
+        
+        Returns:
+            merged_part (PartModel): 병합된 PartModel 객체
+        """
         merged_part_model = PartModel()
         merged_part_model.part_name = "merged_part"
         color: str = assembly.part_model_list[cluster[0]].color
@@ -312,9 +480,6 @@ class AssemblyFactory:
                     except AttributeError:
                         continue
 
-                        
-
-
         return cls.create_part_model(brep_shape = fused_brep_shape,
                                     vista_mesh = fused_vista_mesh, 
                                     part_name = "merged_part", 
@@ -327,24 +492,46 @@ class AssemblyFactory:
                         part_name: str = "part", 
                         part_index: Optional[int] = None, 
                         color: str = "red") -> PartModel: 
-        bnd_box = Bnd_Box()
-        brepbndlib.Add(brep_shape, bnd_box) 
-        
-        if vista_mesh is None:
-            mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
-        else:
-            mesh: pv.PolyData = pv.PolyData(vista_mesh.points, vista_mesh.faces)
+            """
+            클래스 메서드로서 파트 모델을 생성합니다.
 
-        part_model = PartModel(part_name = part_name,
-                        vista_mesh = mesh, 
-                        brep_shape = brep_shape,
-                        bnd_box = bnd_box,
-                        part_index = part_index)
-        part_model.color = color
-        return part_model
+            Parameters:
+                brep_shape (TopoDS_Shape): BREP 형태의 모델
+                vista_mesh (Optional[pv.PolyData]): PyVista의 PolyData 형태의 메쉬 (기본값: None)
+                part_name (str): 파트의 이름 (기본값: "part")
+                part_index (Optional[int]): 파트의 인덱스 (기본값: None)
+                color (str): 파트의 색상 (기본값: "red")
+
+            Returns:
+                PartModel: 생성된 파트 모델 객체
+            """
+            bnd_box = Bnd_Box()
+            brepbndlib.Add(brep_shape, bnd_box) 
+            
+            if vista_mesh is None:
+                mesh: pv.PolyData = ShapeToMeshConvertor.convert_to_pyvista_mesh(brep_shape)
+            else:
+                mesh: pv.PolyData = pv.PolyData(vista_mesh.points, vista_mesh.faces)
+
+            part_model = PartModel(part_name = part_name,
+                            vista_mesh = mesh, 
+                            brep_shape = brep_shape,
+                            bnd_box = bnd_box,
+                            part_index = part_index)
+            part_model.color = color
+            return part_model
         
     @classmethod
     def create_part_connectivity_dict(cls, part_model_list: List[PartModel]) -> Dict[int, int]:
+        """
+        주어진 PartModel 리스트를 기반으로 부품 연결성 딕셔너리를 생성합니다.
+
+        Parameters:
+            part_model_list (List[PartModel]): 부품 모델 리스트
+
+        Return:
+            Dict[int, int]: 부품 인덱스를 키로, 연결된 이웃 부품 인덱스의 리스트를 값으로 갖는 딕셔너리
+        """
         conectivity_dict: dict[int, list[int]] = {}
         
         for part_model in part_model_list:   
@@ -362,24 +549,3 @@ class AssemblyFactory:
                     conectivity_dict[part_index].append(neighbor_index)
                     
         return conectivity_dict
-
-
-if __name__ == "__main__":
-    def assembly_example_code():
-        assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
-        view_document = ViewDocument()
-        
-        assembly.add_to_view_document(view_document)
-        print(assembly.conectivity_dict)
-        view_document.display()
-        
-    def simplify_example_code():
-        assembly: Assembly = AssemblyFactory.create_assembly("AirCompressor.stp")
-        for part_model in assembly.part_model_list:
-            part_model.simplify(0.9)    
-            
-        view_document = ViewDocument()
-        assembly.add_to_view_document(view_document)    
-        view_document.display()
-
-    simplify_example_code()

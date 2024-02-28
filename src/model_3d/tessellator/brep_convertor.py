@@ -19,6 +19,15 @@ import pyvista as pv
 class ShapeToMeshConvertor:
     @classmethod    
     def convert_to_pyvista_mesh(cls, brep_shape: TopoDS_Shape) -> pv.PolyData:
+        """
+        BRep 형상을 PyVista 메시로 변환합니다.
+
+        매개변수:
+            brep_shape (TopoDS_Shape): 변환할 BRep 형상입니다.
+
+        반환값:
+            pv.PolyData: BRep 형상의 PyVista 메시 표현입니다.
+        """
         cls.init_brep_mesh(brep_shape)
         explorer = TopExp_Explorer()
         explorer.Init(brep_shape, TopAbs_FACE)
@@ -35,19 +44,28 @@ class ShapeToMeshConvertor:
     
     @classmethod    
     def init_brep_mesh(cls, shape: TopoDS_Shape) -> BRepMesh_IncrementalMesh:    
+        """
+        BRep 메시를 초기화합니다.
+
+        매개변수:
+            shape (TopoDS_Shape): BRep 형상입니다.
+
+        반환값:
+            BRepMesh_IncrementalMesh: 초기화된 BRep 메시입니다.
+        """
         def calculate_angle_deflection() -> float:
-            # init basic value
+            # 기본값 초기화
             angle_deflection_max, angle_deflection_min = 0.8, 0.2
             quality = 5.0
 
-            # calculate angle deflection
+            # 각도 변형 계산
             angle_deflection_gap = (angle_deflection_max - angle_deflection_min) / 10
             angle_deflection = \
                 max(angle_deflection_max - (quality * angle_deflection_gap), angle_deflection_min)
             return angle_deflection
 
         def calculate_line_deflection(bnd_box: Bnd_Box) -> float:
-            # calculate linear deflection
+            # 선형 변형 계산
             gvec1 = Graphic3d_Vec3d(*bnd_box.CornerMin().Coord())
             gvec2 = Graphic3d_Vec3d(*bnd_box.CornerMax().Coord())
             deflection = prs3d.GetDeflection(gvec1, gvec2, 0.001)
@@ -67,6 +85,14 @@ class ShapeToMeshConvertor:
 
     @classmethod    
     def init_triangle_mesh(cls, mesh_vertices, mesh_faces, face) -> None:
+        """
+        삼각형 메시를 초기화합니다.
+
+        매개변수:
+            mesh_vertices (list): 메시 정점의 리스트입니다.
+            mesh_faces (list): 메시 면의 리스트입니다.
+            face: 삼각형 메시를 초기화할 대상 면입니다.
+        """
         before_vertices_number = len(mesh_vertices)
         loc = TopLoc_Location()
         
