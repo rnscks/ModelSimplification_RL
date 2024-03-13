@@ -106,8 +106,8 @@ class LMSCEnv(gym.Env):
     def __init__(self, 
                 stp_file_path: str = "ControlValve.stp") -> None:
         super(LMSCEnv, self).__init__()
-        self.action_space = spaces.Box(low=0.01, high=1.0, shape=(4,), dtype=float)
-        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(30 * 2 + 1, ), dtype=float)
+        self.action_space = spaces.Box(low=1.2, high=5.0, shape=(3,), dtype=float)
+        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(300, ), dtype=float)
         
         self.stp_file_path: str = stp_file_path  
 
@@ -132,32 +132,29 @@ class LMSCEnv(gym.Env):
         """
         decimation_index = action[0]
         decimation_ratio = action[1]
-        cluster_index = action[2]
-        cluster_ratio = action[3]
+        cluster_ratio = action[2]
         reward: float = 0.0  
 
         reward += self.agent.action(decimation_index, 
                             decimation_ratio,
-                            cluster_index,
-                            cluster_ratio)        
+                            cluster_ratio)
         self.time_step += 1
         observation: np.ndarry = self.agent.get_observation()
         terminated: bool = False
         
         total_face = self.agent.simplified_assembly.get_face_number()
-        print(total_face)
-        if total_face <= 5000:
+        if total_face <= 7000:
             terminated = True
             reward += 1.0  
-            reward += 1
-            
-        if self.time_step >= 100:
+            print("Success!!")
+        
+        if self.time_step >= 50:
             terminated = True   
             reward -= 1.0
+            print("Failed!!")
             
-        reward += self.agent.get_reward(terminated)   
-        if terminated:
-            print("terminated!!")
+        reward += self.agent.get_reward(terminated, decimation_index)   
+        
         return observation, reward, terminated, False, {} 
     
     def reset(self, 

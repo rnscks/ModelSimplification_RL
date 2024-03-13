@@ -163,7 +163,6 @@ class PointToMeshDistance(Evaluator):
         
         return (pmd1 + pmd2) * 0.5
 
-
 class Cluster(ABC):
     def __init__(self) -> None:
         super().__init__()  
@@ -308,3 +307,76 @@ class GirvanNewman(Cluster):
         props = GProp_GProps()
         brepgprop.SurfaceProperties(common_shape, props)
         return props.Mass()
+
+
+import trimesh
+import networkx as nx
+import matplotlib.pyplot as plt
+import markov_clustering as mcl
+import numpy as np
+    
+class MarkovCluster(Cluster):
+    def __init__(self, assembly: Assembly) -> None:
+        tri_meshes: List[trimesh.Trimesh] = []
+        for part in assembly.part_model_list:
+            if part.torch_mesh is None:
+                raise ValueError("part.torch_mesh must not be None")    
+            tir_mesh = trimesh.Trimesh(vertices=part.torch_mesh.verts_packed(), faces=part.torch_mesh.faces_packed())   
+            tri_meshes.append(tir_mesh)
+            
+        self.graph: nx.Graph = self.build_adjacency_graph(tri_meshes)  
+    
+    def cluster(self, inflation_value: float = 3.0) -> List[List[int]]:
+        node_labels = list(self.graph.nodes())  
+        matrix = nx.to_numpy_array(self.graph, nodelist=node_labels)
+
+        result = mcl.run_mcl(matrix, inflation=inflation_value)
+        clusters = mcl.get_clusters(result)
+        clusters = [list(cluster) for cluster in clusters]  
+        
+        self.graph = self.merge_clusters_and_build_graph(clusters)
+        
+        return clusters
+    
+    def merge_clusters_and_build_graph(self, clusters):
+        node_labels = list(self.graph.nodes())
+        merged_graph = nx.Graph()
+        
+        for i in range(len(clusters)):
+            merged_graph.add_node(i + 1)
+        
+        for i, cluster1 in enumerate(clusters):
+            for j, cluster2 in enumerate(clusters[:i + 1]):
+                if i == j:
+                    continue
+                for node_a in cluster1:
+                    for node_b in cluster2:
+                        node_a_label = node_labels[node_a]
+                        node_b_label = node_labels[node_b]
+                        if self.graph.has_edge(node_a_label, node_b_label):
+                            merged_graph.add_edge(i + 1, j + 1)
+                            break
+                        
+        return merged_graph
+    
+    def build_adjacency_graph(self, meshes: List[trimesh.Trimesh]):
+        G = nx.Graph()
+        
+        for i, mesh1 in enumerate(meshes):
+            for j, mesh2 in enumerate(meshes):
+                if i == j:  
+                    continue
+                if self.check_collision_between(mesh1, mesh2):
+                    G.add_edge(i + 1, j + 1)
+        return G
+    
+    def check_collision_between(self, mesh1, mesh2):
+        manager = trimesh.collision.CollisionManager()
+        manager.add_object("obj1", mesh1)
+        manager.add_object("obj2", mesh2)
+        return manager.in_collision_internal()
+    
+    def get_flatten_adjacency_matrix(self):
+        matrix= nx.to_numpy_array(self.graph, nodelist=list(self.graph.nodes()))
+        
+        return matrix.ravel()

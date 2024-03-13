@@ -2,7 +2,7 @@ import numpy as np
 from typing import Tuple    
 import pyvista as pv
 
-from src.model_3d.model_util import ChamferDistance, RegionGrowing
+from src.model_3d.model_util import ChamferDistance, RegionGrowing, GirvanNewman, MarkovCluster
 from src.model_3d.cad_model import Assembly, PartModel, AssemblyFactory
 
 class LMSObservation:
@@ -147,6 +147,7 @@ class LMSCAgent:
         self.original_assembly: Assembly = original_assembly    
         self.simplified_assembly: Assembly = simplified_assembly  
         self.observation_step: int = 0      
+        self.cluster = MarkovCluster(self.original_assembly)
         
         
     def is_breakage_part(self, part_index: int) -> bool:        
@@ -171,8 +172,7 @@ class LMSCAgent:
     def action(self, 
                 decimation_index: float, 
                 decimate_ratio: float, 
-                clustering_index: float, 
-                growing_ratio: float) -> None:
+                inflection_value: float = 0.0) -> None:
         """
         에이전트의 액션을 수행합니다.
 
@@ -185,21 +185,12 @@ class LMSCAgent:
         Return:
             None
         """
-        reward: float = 0.0 
+        reward: float = 0.0
         decimation_index = self.quantize_action(decimation_index)
-        for i in range(len(self.simplified_assembly.part_model_list)):
-            if self.is_breakage_part(i):
-                reward -= 0.1
         
-        if self.is_breakage_part(decimation_index):
-            reward -= 0.1
-
         self.simplified_assembly.part_model_list[decimation_index].simplify(decimate_ratio)
 
-        clustering_index = self.quantize_action(clustering_index)   
-
-        region_growing = RegionGrowing(growing_ratio)
-        cluster_list: list[list[int]] = region_growing.cluster(self.simplified_assembly, clustering_index)    
+        cluster_list: list[list[int]] = self.cluster.cluster(inflection_value)    
         self.simplified_assembly = AssemblyFactory.create_merged_assembly(self.simplified_assembly, cluster_list, "Merged AirCompressor")   
         self.original_assembly = AssemblyFactory.create_merged_assembly(self.original_assembly, cluster_list, "Merged AirCompressor")       
         return reward
@@ -212,10 +203,13 @@ class LMSCAgent:
             np.ndarray: 관측값
         """
         observation: LMSObservation = LMSObservation(self.original_assembly, self.simplified_assembly)  
-        return observation.get_observation() 
+        
+        observation = np.hstack([observation.get_observation(), self.cluster.get_flatten_adjacency_matrix()]) 
+        return np.pad(observation, (0, 300 - len(observation)), mode='constant')   
     
     def get_reward(self, 
-                    terminated: bool = False) -> float:          
+                    terminated: bool = False,
+                    decimation_index: int = 0) -> float:          
         """
         보상 값을 반환합니다.
 
@@ -226,6 +220,9 @@ class LMSCAgent:
             float: 보상 값
         """
         reward: float = 0.0 
+        decimation_index = self.quantize_action(decimation_index)   
+        if self.is_breakage_part(decimation_index): 
+            reward -= 0.1   
 
         if terminated:
             for i in range(len(self.simplified_assembly.part_model_list)):  
@@ -238,8 +235,8 @@ class LMSCAgent:
                 
                 reward += (1 / chamfer_distance)
             
-            for part_model in self.simplified_assembly.part_model_list:
-                if part_model is None or part_model.vista_mesh.n_faces_strict == 0:
+            for idx, part_model in enumerate(self.simplified_assembly.part_model_list):
+                if self.is_breakage_part(idx) or part_model.vista_mesh.n_faces_strict == 0:
                     reward -= 1.0
 
         return reward
