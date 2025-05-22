@@ -16,7 +16,7 @@ class TrainEnv(gym.Env):
     def __init__(self, 
                 task_dirs: List[str],   
                 max_time_step: int = 50,
-                target_sim_ratio: float = 0.98) -> None:
+                target_sim_boundary: Tuple[float, float] = (0.5, 0.9)) -> None:
         super(TrainEnv, self).__init__()
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
         self.observation_space = spaces.Dict({
@@ -27,7 +27,7 @@ class TrainEnv(gym.Env):
         self.max_time_step: int = max_time_step
         self.simplyfied_assembly: Assembly = Assembly()
         self.original_assembly: Assembly = Assembly()
-        self.target_sim_ratio: float = target_sim_ratio
+        self.target_sim_boundary: Tuple[float, float] = target_sim_boundary 
         self.n_episode: int = 0
         return
 
@@ -69,6 +69,7 @@ class TrainEnv(gym.Env):
     def reset(self, 
             seed=None, 
             options=None):
+        
         self.n_episode += 1
         assembly = self.task_buffer.cur_assembly()  
         
@@ -76,6 +77,8 @@ class TrainEnv(gym.Env):
         self.simplyfied_assembly = Assembly()
         self.original_assembly.copy_from(assembly) 
         self.simplyfied_assembly.copy_from(assembly)
+        
+        self.target_sim_ratio = np.random.uniform(self.target_sim_boundary[0], self.target_sim_boundary[1])  
         
         self.agent = SimplificationAgent(self.action_space)  
         self.time_step: int = 0
@@ -116,6 +119,11 @@ class TrainEnv(gym.Env):
             cd_norm = cd
             epsilon = 1e-6
             reward += np.log(1 + 1/(cd_norm + epsilon))    
+            
+            n_face = self.simplyfied_assembly.n_faces() 
+            target_n_face = self.original_assembly.n_faces() - (self.target_sim_ratio * self.original_assembly.n_faces())   
+            reward += (n_face - target_n_face) / target_n_face  
+            
         return reward
     
     def _quantize_action(self, continuous_action, max_range: int = 10):

@@ -13,11 +13,9 @@ def curriculum_train(
     task_set: List[str] = ["test_set"], 
     rl_file_name: str = "",
     save_file_name: str = "TEST_GCN_MODELSIMPLIIIFCATION",
-    target_sim_ratio: float = 0.95, 
     max_time_step: int = 30) -> None:
     env = TrainEnv(
         task_set, 
-        target_sim_ratio=target_sim_ratio, 
         max_time_step=max_time_step)       
     check_env(env)  
     
@@ -58,5 +56,4 @@ if __name__ == "__main__":
             "data/set4"],
         rl_file_name="",
         save_file_name="PPO_MCL_TEST_MODEL",
-        target_sim_ratio=0.95,
-        max_time_step=50)  
+        max_time_step=50)

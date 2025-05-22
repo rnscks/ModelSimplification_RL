@@ -146,7 +146,7 @@ class SimplificationAgent:
         features = []
         for idx, part in enumerate(simplified_assembly):
             if part.n_faces() == 0:
-                features.append([0, 0, 0])  
+                features.append([0] * GRAPH.NODE_DIM.value)   
                 continue
             volume = part.volume()
             surface_area = part.area()
@@ -156,8 +156,6 @@ class SimplificationAgent:
         features = np.array(features)
         features = (features - np.min(features, axis=0)) / (np.ptp(features, axis=0) + 1e-6)
         return features
-    
-
 
 
 if __name__ == "__main__":

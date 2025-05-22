@@ -4,7 +4,9 @@ from pytorch3d import loss
 from pytorch3d.structures import Pointclouds
 from scipy.spatial import KDTree
 from enum import Enum
-
+import pyvista as pv
+import numpy as np
+from typing import List, Tuple, Dict
 from src.mesh.model import Entity
 
 class METRIC(Enum):
@@ -15,7 +17,7 @@ class Metric(ABC):
         super().__init__()  
     
     @abstractmethod
-    def evaluate(self, model: Entity) -> float:
+    def evaluate(self, model: Entity, other_model: Entity) -> float:
         pass
 
 class ChamferDistance(Metric):
@@ -71,3 +73,72 @@ class ConcatArea(Metric):
         bounding_box_max = np.max(points, axis=0)
         extents = bounding_box_max - bounding_box_min
         return np.sum(extents)
+    
+class VisualLoss(Metric):
+    def __init__(self, window_size: Tuple[int, int] = (400, 400)):  
+        self.plotter = pv.Plotter(off_screen=True, window_size=window_size) 
+        self.positions: List[Tuple] = [
+            (2, 0, 0), (-2, 0, 0), (0, 2, 0), (0, -2, 0), (0, 0, 2), (0, 0, -2),
+            (2, 2, 2), (-2, 2, 2), (2, -2, 2), (2, 2, -2), (-2, -2, 2), (-2, 2, -2), (2, -2, -2), (-2, -2, -2)
+        ]
+        self.viewup: Dict[Tuple[int, int, int], Tuple[int, int, int]] = {
+            (2, 0, 0) : (0, 1, 0),
+            (-2, 0, 0) : (0, 1, 0), 
+            (0, 2, 0) : (0, 0, 1),  
+            (0, -2, 0) : (0, 0, -1), 
+            (0, 0, 2) : (0, 1, 0),
+            (0, 0, -2) : (0, 1, 0), 
+            (2, 2, 2) : (0, 1, 0),  
+            (-2, 2, 2) : (0, 1, 0), 
+            (2, -2, 2) : (0, 1, 0), 
+            (-2, -2, 2) : (0, 1, 0), 
+            (2, 2, -2) : (0, 1, 0),
+            (-2, 2, -2) : (0, 1, 0), 
+            (2, -2, -2) : (0, 1, 0), 
+            (-2, -2, -2) : (0, 1,  0)}
+        self.plotter.camera.zoom(1.0)   
+        # self.plotter.enable_parallel_projection()   
+        # self.plotter.parallel_scale = 1.0
+        
+        
+    def evaluate(self, model: Entity, other_model: Entity) -> float:   
+        depth_maps = []
+        min_depth = -5.0
+        max_depth = 0.0
+        mesh: pv.PolyData = model.mesh
+        other_mesh: pv.PolyData = other_model.mesh
+        xmin, xmax, ymin, ymax, zmin, zmax = mesh.bounds
+        center = [(xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2]
+        
+        for position in self.positions:
+            # 카메라의 위치, 초점, ViewUp 방향을 설정
+            self.plotter.set_position((position[0] + center[0], position[1] + center[1], position[2] + center[2]))
+            self.plotter.set_focus(center)
+            self.plotter.set_viewup(self.viewup[position])
+            
+            # 첫번째 메쉬에 대한 깊이맵을 생성 후 초기화
+            self.plotter.add_mesh(mesh)
+            self.plotter.show(auto_close=False) 
+            depth_map: np.ndarray = self.plotter.get_image_depth(fill_value=min_depth)
+            self.plotter.clear()
+            
+            # 두번째 메쉬에 대한 깊이맵을 생성 후 초기화
+            self.plotter.add_mesh(other_mesh)  
+            self.plotter.show(auto_close=False) 
+            other_depth_map: np.ndarray = self.plotter.get_image_depth(fill_value=min_depth)    
+            self.plotter.clear()
+            
+            if depth_map.max() > max_depth or other_depth_map.max() > max_depth:    
+                raise ValueError("Depth map is out of range")   
+            if depth_map.min() < min_depth or other_depth_map.min() < min_depth:
+                raise ValueError("Depth map is out of range")   
+            
+            # 깊이맵을 정규화
+            depth_map = (depth_map - min_depth) / (max_depth - min_depth)
+            other_depth_map = (other_depth_map - min_depth) / (max_depth - min_depth)
+            
+            # 깊이맵의 차이를 계산(MSE의 Error에 해당하는 값)
+            error_depth_map = depth_map - other_depth_map
+            depth_maps.append(error_depth_map)
+        depth_maps = np.array(depth_maps)   
+        return np.mean((depth_maps) ** 2)
