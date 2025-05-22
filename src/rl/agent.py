@@ -1,8 +1,8 @@
-import numpy as np
 from itertools import product
 from enum import Enum
-import gymnasium as gym
 from typing import Tuple, List
+import gymnasium as gym
+import numpy as np
 
 from src.graph.cluster import HierarchicalCluster
 from src.graph.preprocess import Preprocess, GRAPH
