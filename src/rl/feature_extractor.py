@@ -6,13 +6,14 @@ from torch_geometric.data import Data, Batch
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from src.rl.agent import GRAPH
-
+from src.rl.point_net import get_model
 
 class GNNExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
-        self.conv1 = GCNConv(GRAPH.NODE_DIM.value, 128)
+        self.conv1 = GCNConv(GRAPH.NODE_DIM.value+128, 128)
         self.conv2 = GCNConv(128, features_dim)
+        self.point_net = get_model(num_class=128, normal_channel=False) 
         
         
     def forward(self, obs: Dict[str, torch.Tensor]) -> torch.Tensor:   
@@ -23,7 +24,13 @@ class GNNExtractor(BaseFeaturesExtractor):
         # 각 배치에 대해 그래프 데이터를 처리
         data_list = []
         for i in range(batch_size):
+            pointcloud = torch.as_tensor(obs['pointcloud'][i], dtype=torch.float32, device=device) 
+            pointcloud[torch.isnan(pointcloud)] = 0.0  # NaN 값을 0으로 대체    
+            point_features = self.point_net(pointcloud) 
+            
             node = torch.as_tensor(obs['node'][i], dtype=torch.float32, device=device)
+            node = torch.cat([node, point_features], dim=1)  # 노드 특성에 포인트넷 특성 추가   
+            node[torch.isnan(node)] = 0.0  # NaN 값을 0으로 대체    
             edge_index = torch.as_tensor(obs['edge_index'][i], dtype=torch.long, device=device)
             edge_attr = torch.as_tensor(obs['edge_attr'][i], dtype=torch.float32, device=device)
             # 유효한 엣지만 선택

@@ -134,7 +134,12 @@ class SimplificationAgent:
         padded_edge_attr = np.zeros((GRAPH.MAX_EDGES.value, 1))    
         padded_edge_attr[:edge_attr.shape[0], :] = edge_attr
         
+        point_cloud = np.zeros((GRAPH.MAX_NODES.value, 1024, 3))
+        for idx, part in enumerate(simplified_assembly):    
+            point_cloud[idx] = part.np_point_cloud()
+        
         obs = {
+            'pointcloud': point_cloud.astype(np.float32),  
             'node': padded_x.astype(np.float32),
             'edge_index': padded_edge_index.astype(np.int64),
             'edge_attr': padded_edge_attr.astype(np.float32)}

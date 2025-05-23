@@ -20,6 +20,7 @@ class TrainEnv(gym.Env):
         super(TrainEnv, self).__init__()
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
         self.observation_space = spaces.Dict({
+            'pointcloud': spaces.Box(low=-1, high=1, shape=(GRAPH.MAX_NODES.value, 1024, 3), dtype=np.float32),
             'node': spaces.Box(low=-1, high=1, shape=(GRAPH.MAX_NODES.value, GRAPH.NODE_DIM.value), dtype=np.float32),
             'edge_index': spaces.Box(low=0, high=GRAPH.MAX_NODES.value-1, shape=(GRAPH.MAX_EDGES.value, 2), dtype=np.int64),
             'edge_attr': spaces.Box(low=-1, high=1, shape=(GRAPH.MAX_EDGES.value, 1), dtype=np.float32)})

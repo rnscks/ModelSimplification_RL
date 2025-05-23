@@ -6,7 +6,7 @@ import pyvista as pv
 import torch
 from abc import ABC
 
-POINTS_PER_PART = 1280
+POINTS_PER_PART = 1024
 
 class Entity(ABC):
     def __init__(self) -> None:
@@ -54,7 +54,14 @@ class Entity(ABC):
         point_cloud = Pointclouds(sampled_points)
         self.point_cloud = point_cloud  
         return point_cloud
-
+    
+    def np_point_cloud(self) -> Optional[torch.Tensor]:
+        if self.point_cloud == None:
+            return None
+        point_cloud = self.point_cloud.points_list()[0]
+        point_cloud = point_cloud.cpu().numpy()
+        return point_cloud  
+    
 class PartModel(Entity):
     def __init__(self, mesh:pv.PolyData=pv.PolyData()) -> None:
         super().__init__()
