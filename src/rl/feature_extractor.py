@@ -5,13 +5,13 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data, Batch
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
-from src.rl.agent import GRAPH
+from src.rl.agent.agent import GRAPH
 from src.rl.point_net import get_model
 
 class GNN_PointNetExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
-        self.conv1 = GCNConv(GRAPH.NODE_DIM.value+128, 128)
+        self.conv1 = GCNConv(observation_space['node'].shape[1]+128, 128)
         self.conv2 = GCNConv(128, features_dim)
         self.point_net = get_model(num_class=128, normal_channel=False) 
         
@@ -56,7 +56,7 @@ class GNN_PointNetExtractor(BaseFeaturesExtractor):
 class GNNExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
-        self.conv1 = GCNConv(GRAPH.NODE_DIM.value, 128)
+        self.conv1 = GCNConv(observation_space['node'].shape[1], 128)
         self.conv2 = GCNConv(128, features_dim)
         
         

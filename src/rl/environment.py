@@ -5,31 +5,27 @@ from typing import Tuple, List
 
 from src.mesh.metrics import ChamferDistance, METRIC
 from src.mesh.model import Assembly
-from src.rl.agent import SimplificationAgent
+from src.rl.agent.agent import SimplificationAgent
 from src.rl.task_buffer import TaskBuffer, Task
-from src.rl.agent import GRAPH
+from src.rl.agent.agent import GRAPH
 from src.rl.util import profile_time
 
 
 class TrainEnv(gym.Env):
     metadata = {"render_modes": [None]}
     def __init__(self, 
+                agent: SimplificationAgent, 
                 task_dirs: List[str],   
                 max_time_step: int = 50,
                 target_sim_boundary: Tuple[float, float] = (0.5, 0.9)) -> None:
         super(TrainEnv, self).__init__()
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
-        self.observation_space = spaces.Dict({
-            'pointcloud': spaces.Box(low=-1, high=1, shape=(GRAPH.MAX_NODES.value, 1024, 3), dtype=np.float32),
-            'node': spaces.Box(low=-1, high=1, shape=(GRAPH.MAX_NODES.value, GRAPH.NODE_DIM.value), dtype=np.float32),
-            'edge_index': spaces.Box(low=0, high=GRAPH.MAX_NODES.value-1, shape=(GRAPH.MAX_EDGES.value, 2), dtype=np.int64),
-            'edge_attr': spaces.Box(low=-1, high=1, shape=(GRAPH.MAX_EDGES.value, 1), dtype=np.float32)})
-        self.task_buffer: TaskBuffer = TaskBuffer(task_dirs)
+        self.agent: SimplificationAgent = agent
+        self.action_space = agent.action_space
+        self.observation_space = agent.observation_space
+        
+        self.task_buffer: TaskBuffer = TaskBuffer(task_dirs)    
         self.max_time_step: int = max_time_step
-        self.simplyfied_assembly: Assembly = Assembly()
-        self.original_assembly: Assembly = Assembly()
         self.target_sim_boundary: Tuple[float, float] = target_sim_boundary 
-        self.n_episode: int = 0
         return
 
 
@@ -70,8 +66,6 @@ class TrainEnv(gym.Env):
     def reset(self, 
             seed=None, 
             options=None):
-        
-        self.n_episode += 1
         assembly = self.task_buffer.cur_assembly()  
         
         self.original_assembly = Assembly()
@@ -80,8 +74,6 @@ class TrainEnv(gym.Env):
         self.simplyfied_assembly.copy_from(assembly)
         
         self.target_sim_ratio = np.random.uniform(self.target_sim_boundary[0], self.target_sim_boundary[1])  
-        
-        self.agent = SimplificationAgent(self.action_space)  
         self.time_step: int = 0
         
         obs = self.agent.get_observation(self.simplyfied_assembly, self.original_assembly)

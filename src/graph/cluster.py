@@ -45,10 +45,10 @@ class HierarchicalCluster(Cluster):
         return clusters_idx
 
 if __name__ == "__main__":
-    from src.graph.preprocess import Preprocess
+    from src.graph.preprocess import AdjGraph
     
     assembly = Assembly.load("src/data/assembly_models/set3/3_assembly41")
-    matrix = Preprocess().graph_process(assembly)
+    matrix = AdjGraph().graph_process(assembly)
     clusters = HierarchicalCluster().cluster(matrix)
     print(clusters)
     clusters = MarkovCluster().cluster(matrix, inflation_value=5.0)
