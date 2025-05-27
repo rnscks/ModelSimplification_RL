@@ -4,7 +4,7 @@ from typing import List
 import os
 
 from src.rl.environment import TrainEnv 
-from src.rl.feature_extractor import GNNExtractor
+from src.rl.feature_extractor import GNN_PointNetExtractor, GNNExtractor
 
 
 

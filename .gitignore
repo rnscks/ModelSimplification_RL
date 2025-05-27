@@ -1,6 +1,6 @@
 /data
 /logs
 /models
-./*.pyc
-/__pycache__/
+__pycache__/
 /.DS_Store
+*.pyc
