@@ -41,7 +41,7 @@ class SimplificationAction(Action):
         decimation_index = self.quantize_action(decimation_index, len(assembly))    
         part = assembly[decimation_index]
         decimate_ratio = self._rescale_action(decimate_ratio, 0.01, 0.9)
-        part.simplify(decimate_ratio)
+        part.simplified(decimate_ratio)
         return assembly
 
 class MergeAction(Action):
@@ -84,16 +84,17 @@ class MergeAction(Action):
 if __name__ == "__main__":
     def merge_action_example():
         merge_action = MergeAction()
-        assembly = Assembly.load('data/set4/2_assembly51')
+        assembly = Assembly.load('data/set4/1_assembly50')
         assembly.simplify(0.1)
         
         print("Before Merge N Faces: ", assembly.n_faces())
         print("Before Merge N Parts: ", len(assembly))
-        cluster = merge_action.cal_cluster(assembly, 0.5)
+        cluster = merge_action.cal_cluster(assembly, 0.8)
         assembly = merge_action.action(assembly, cluster)
         print("After Merge N Faces: ", assembly.n_faces())
         print("After Merge N Parts: ", len(assembly))
-        assembly.display()
+        for part in assembly.parts:
+            part.display()
 
 
     def simplification_action_example():
@@ -108,3 +109,5 @@ if __name__ == "__main__":
         print("After Simplification N Faces: ", assembly.n_faces())
         print("After Simplification N Parts: ", len(assembly))
         assembly.display()
+        
+    merge_action_example()

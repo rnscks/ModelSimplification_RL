@@ -26,7 +26,7 @@ def curriculum_train(
     
     if rl_file_name == "":
         policy_kwargs = dict(
-            features_extractor_class=GNNExtractor,
+            features_extractor_class=GNN_PointNetExtractor,
             features_extractor_kwargs=dict(features_dim=128)
         )
 
@@ -36,9 +36,10 @@ def curriculum_train(
             policy_kwargs=policy_kwargs,
             verbose=1, 
             tensorboard_log='./logs/',
-            n_steps=2048,
-            batch_size=64,
-            n_epochs=10,)
+            n_steps=128,
+            batch_size=32,
+            n_epochs=10,
+            device='cuda')
     else:
         rl_file_path = os.path.join('models', rl_file_name) 
         model = PPO.load(
@@ -53,33 +54,20 @@ def curriculum_train(
 
 
 if __name__ == "__main__":
-    agent1 = SimplificationAgent(
-        observation=BasicObservation(
+
+    agent = SimplificationAgent(
+        observation=PointNetObservation(
             cd_option=False, 
             vl_option=False))
-    agent2 = SimplificationAgent(
-        observation=PointNetObservation(
-            cd_option=True, 
-            vl_option=False))   
-    agent3 = SimplificationAgent(
-        observation=PointNetObservation(
-            cd_option=False, 
-            vl_option=True))
-    agent4 = SimplificationAgent(
-        observation=BasicObservation(
-            cd_option=True, 
-            vl_option=True))
 
-    agents = [agent1, agent2, agent3, agent4]
-    for i, agent in enumerate(agents):
-        curriculum_train(
-            agent=agent,
-            task_set=[
-                "data/set1",
-                "data/set2",
-                "data/set3",
-                "data/set4"],
-            rl_file_name="",
-            save_file_name=f"PPO_MCL_TEST_MODEL{i}",
-            max_time_step=50,
-            total_timesteps=20000)
+    curriculum_train(
+        agent=agent,
+        task_set=[
+            "data/set1",
+            "data/set2",
+            "data/set3",
+            "data/set4"],
+        rl_file_name="",
+        save_file_name=f"PPO_MCL_TEST_MODEL",
+        max_time_step=50,
+        total_timesteps=20000)

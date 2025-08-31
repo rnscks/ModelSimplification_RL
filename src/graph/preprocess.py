@@ -13,7 +13,6 @@ class GRAPH(Enum):
     MAX_EDGES = 400
     EPSILON = 1e-4
 
-
 class AdjGraph:
     def __init__(self):
         pass

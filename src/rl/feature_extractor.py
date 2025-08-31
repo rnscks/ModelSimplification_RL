@@ -11,12 +11,12 @@ from src.rl.point_net import get_model
 class GNN_PointNetExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):
         super().__init__(observation_space, features_dim)
-        self.conv1 = GCNConv(observation_space['node'].shape[1]+128, 128)
+        self.conv1 = GCNConv(observation_space['node'].shape[1]+64, 128)
         self.conv2 = GCNConv(128, features_dim)
-        self.point_net = get_model(num_class=128, normal_channel=False) 
+        self.point_net = get_model(out_dim=64, normal_channel=False) 
         
         
-    def forward(self, obs: Dict[str, torch.Tensor]) -> torch.Tensor:   
+    def forward(self, obs: Dict[str, torch.Tensor]) -> torch.Tensor:
         # 현재 장치 확인
         device = next(self.parameters()).device
         batch_size = obs['node'].shape[0]
@@ -51,7 +51,6 @@ class GNN_PointNetExtractor(BaseFeaturesExtractor):
         batch_size = batch.batch.max().item() + 1
         x = torch.cat([torch.mean(x[batch.batch == i], dim=0, keepdim=True) for i in range(batch_size)], dim=0)
         return x
-    
     
 class GNNExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space, features_dim=128):

@@ -73,7 +73,7 @@ class ConcatArea(Metric):
         bounding_box_max = np.max(points, axis=0)
         extents = bounding_box_max - bounding_box_min
         return np.sum(extents)
-    
+
 class VisualLoss(Metric):
     def __init__(self, window_size: Tuple[int, int] = (400, 400)):  
         self.plotter = pv.Plotter(off_screen=True, window_size=window_size) 

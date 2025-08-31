@@ -57,7 +57,10 @@ class Entity(ABC):
     
     def np_point_cloud(self) -> Optional[torch.Tensor]:
         if self.point_cloud == None:
-            return None
+            self.torch_point_cloud()
+            if self.point_cloud == None:    
+                return None
+            
         point_cloud = self.point_cloud.points_list()[0]
         point_cloud = point_cloud.cpu().numpy()
         return point_cloud  
@@ -91,7 +94,7 @@ class PartModel(Entity):
         self.point_cloud = None
         return
     
-    def simplify(self, decimation_ratio: float) -> None: 
+    def simplified(self, decimation_ratio: float) -> None: 
         if self.mesh is None:
             return
         if self.mesh.n_faces_strict == 0:
@@ -101,6 +104,11 @@ class PartModel(Entity):
         # self.mesh = self.mesh.triangulate()   
         self.point_cloud = None
         return
+    
+    def simplify(self, decimation_ratio: float) -> 'PartModel': 
+        simplified_part = self.copy()
+        simplified_part.simplified(decimation_ratio)
+        return simplified_part  
 
     def copy_from(self, other: 'PartModel') -> None:
         if isinstance(other, PartModel) == False:    
@@ -118,6 +126,9 @@ class PartModel(Entity):
         copied_part = PartModel()   
         copied_part.copy_from(self) 
         return copied_part  
+    
+    def center(self) -> torch.Tensor:   
+        return self.mesh.center if self.mesh else torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)    
     
     def __hash__(self):
         return super().__hash__()
@@ -176,7 +187,7 @@ class Assembly(Entity):
     
     def simplify(self, decimation_ratio: float) -> None:    
         for part in self:
-            part.simplify(decimation_ratio)
+            part.simplified(decimation_ratio)
         self.mesh = self.merged_mesh()
         return
     
